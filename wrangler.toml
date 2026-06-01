@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 # KV namespace — ganti id dengan hasil: wrangler kv:namespace create BOT_KV
 [[kv_namespaces]]
 binding = "BOT_KV"
-id = "GANTI_DENGAN_KV_ID_KAMU"
+id = "37b6cc7548d14d619d3eba005952e0b7"
 
 # Environment variables — jangan tulis di sini, pakai: wrangler secret put NAMA_VAR
 # BOT_TOKEN          = token dari @BotFather
