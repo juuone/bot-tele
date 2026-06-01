@@ -1,0 +1,15 @@
+name = "telegram-bot"
+main = "index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# KV namespace — ganti id dengan hasil: wrangler kv:namespace create BOT_KV
+[[kv_namespaces]]
+binding = "BOT_KV"
+id = "GANTI_DENGAN_KV_ID_KAMU"
+
+# Environment variables — jangan tulis di sini, pakai: wrangler secret put NAMA_VAR
+# BOT_TOKEN          = token dari @BotFather
+# ADMIN_ID           = Telegram user ID kamu (angka)
+# DASHBOARD_PASSWORD = password web dashboard
+# WEBHOOK_SECRET     = string acak (contoh: xK9mQ3pR2n)
