@@ -1,11 +1,5 @@
 // ============================================================
 //  TELEGRAM BOT + WEB DASHBOARD — Cloudflare Workers
-//  Fitur:
-//   - Auto-list semua chat yang /start atau tambah bot ke grup/channel
-//   - Broadcast teks/foto/video ke semua atau filter target
-//   - Inline keyboard menu (contoh: Download App → Kategori → Versi → Kirim file)
-//   - Web dashboard aman dengan password
-//   - Semua data di Cloudflare KV (gratis)
 // ============================================================
 
 const TG = (token, method, params = {}) =>
@@ -223,7 +217,6 @@ async function cmdDelCat(token, chatId, text, env, isAdmin) {
 
 async function cmdAddFile(token, chatId, userId, text, env, isAdmin) {
   if (!isAdmin) return;
-  // Format: /addfile <kategori> | <versi>
   const raw = text.replace(/^\/addfile\s*/i, "").trim();
   const parts = raw.split("|");
   if (parts.length < 2)
@@ -279,7 +272,7 @@ async function cmdHelp(token, chatId, isAdmin) {
   });
 }
 
-// ─── FILE UPLOAD HANDLER (admin kirim file setelah /addfile) ──
+// ─── FILE UPLOAD HANDLER ──────────────────────────────────────
 
 async function handleFileUpload(token, msg, env) {
   const userId = String(msg.from.id);
@@ -333,7 +326,7 @@ async function handleFileUpload(token, msg, env) {
 // ─── CALLBACK QUERY HANDLER ───────────────────────────────────
 
 async function handleCallback(token, query, env) {
-  const { id, data, message, from } = query;
+  const { id, data, message } = query;
   const chatId = message.chat.id;
   const msgId = message.message_id;
 
@@ -468,7 +461,6 @@ async function handleWebhook(request, env) {
     return new Response("Bad Request", { status: 400 });
   }
 
-  // ── Message ──
   if (update.message) {
     const msg = update.message;
     const chat = msg.chat;
@@ -476,7 +468,6 @@ async function handleWebhook(request, env) {
     const isAdmin = String(user?.id) === adminId;
     const text = msg.text || "";
 
-    // Bot ditambahkan ke grup/channel
     if (msg.new_chat_members) {
       const me = await TG(token, "getMe");
       const botId = me.result?.id;
@@ -489,7 +480,6 @@ async function handleWebhook(request, env) {
       }
     }
 
-    // Bot dikeluarkan dari grup/channel
     if (msg.left_chat_member) {
       const me = await TG(token, "getMe");
       if (msg.left_chat_member.id === me.result?.id) {
@@ -497,7 +487,6 @@ async function handleWebhook(request, env) {
       }
     }
 
-    // Admin mengirim file setelah /addfile
     if (
       isAdmin &&
       (msg.document ||
@@ -510,7 +499,6 @@ async function handleWebhook(request, env) {
       if (handled) return new Response("OK");
     }
 
-    // Commands
     if (text.match(/^\/start/i)) {
       await cmdStart(token, chat, user, env);
     } else if (text.match(/^\/broadcast/i)) {
@@ -544,12 +532,10 @@ async function handleWebhook(request, env) {
     }
   }
 
-  // ── Callback query (tombol inline) ──
   if (update.callback_query) {
     await handleCallback(token, update.callback_query, env);
   }
 
-  // ── Bot di-add/remove dari channel (event khusus) ──
   if (update.my_chat_member) {
     const { chat, new_chat_member } = update.my_chat_member;
     const status = new_chat_member?.status;
@@ -587,7 +573,6 @@ function json(data, status = 200) {
 async function handleAPI(request, env, url) {
   const path = url.pathname.replace(/^\/api\//, "");
 
-  // Endpoint publik: cek apakah config sudah di-set (tidak perlu login)
   if (path === "check-config") {
     return json({
       pw_set: !!env.DASHBOARD_PASSWORD,
@@ -597,7 +582,6 @@ async function handleAPI(request, env, url) {
     });
   }
 
-  // Verify endpoint (cek password saja)
   if (path === "verify") {
     if (!checkAuth(request, env)) return json({ ok: false });
     return json({ ok: true });
@@ -749,7 +733,7 @@ async function handleAPI(request, env, url) {
   return json({ ok: false, error: "Not found" }, 404);
 }
 
-// ─── LOGIN PAGE (pure HTML, no JS needed) ─────────────────────
+// ─── LOGIN PAGE ───────────────────────────────────────────────
 
 function loginHTML(origin) {
   return `<!DOCTYPE html>
@@ -810,9 +794,7 @@ function dashboardHTML(origin, k) {
   --yellow:#f59e0b;--text:#e2e8f0;--muted:#64748b;--card:#141e33;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-a{color:var(--accent);text-decoration:none}
 
-/* LAYOUT */
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
 .topbar h1{font-size:1.1rem;color:var(--accent);display:flex;align-items:center;gap:.5rem}
 .online{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--green)}
@@ -821,7 +803,6 @@ a{color:var(--accent);text-decoration:none}
 .wrapper{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 56px)}
 @media(max-width:700px){.wrapper{grid-template-columns:1fr}}
 
-/* SIDEBAR */
 .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:1rem}
 @media(max-width:700px){.sidebar{display:none}}
 .nav-item{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-radius:.75rem;cursor:pointer;color:var(--muted);font-size:.9rem;transition:.15s;margin-bottom:.2rem}
@@ -829,12 +810,10 @@ a{color:var(--accent);text-decoration:none}
 .nav-item.active{background:rgba(59,130,246,.15);color:var(--accent)}
 .nav-icon{font-size:1.1rem;width:1.5rem;text-align:center}
 
-/* MAIN */
 main{padding:1.5rem;max-width:960px}
 .page{display:none}.page.active{display:block}
 .page-title{font-size:1.2rem;font-weight:700;margin-bottom:1.25rem;display:flex;align-items:center;gap:.5rem}
 
-/* CARDS */
 .card{background:var(--card);border:1px solid var(--border);border-radius:1rem;padding:1.25rem;margin-bottom:1.25rem}
 .card-title{font-size:.95rem;font-weight:600;color:var(--accent);margin-bottom:1rem;display:flex;align-items:center;gap:.4rem}
 .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem;margin-bottom:1.25rem}
@@ -842,7 +821,6 @@ main{padding:1.5rem;max-width:960px}
 .stat-n{font-size:2rem;font-weight:700;color:var(--accent)}
 .stat-l{font-size:.75rem;color:var(--muted);margin-top:.2rem}
 
-/* FORM */
 label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
 input,textarea,select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:.6rem;color:var(--text);padding:.65rem .85rem;font-size:.9rem;font-family:inherit;transition:.15s}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
@@ -851,7 +829,6 @@ textarea{resize:vertical;min-height:110px}
 .row{display:flex;gap:.75rem;flex-wrap:wrap}
 .row .fg{flex:1;min-width:180px}
 
-/* BUTTONS */
 .btn{padding:.65rem 1.25rem;border:none;border-radius:.6rem;cursor:pointer;font-size:.9rem;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:.4rem}
 .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#2563eb}
 .btn-success{background:var(--green);color:#fff}.btn-success:hover{background:#16a34a}
@@ -859,54 +836,42 @@ textarea{resize:vertical;min-height:110px}
 .btn-sm{padding:.35rem .75rem;font-size:.8rem}
 .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--accent)}
 
-/* ALERTS */
 .alert{padding:.75rem 1rem;border-radius:.6rem;font-size:.9rem;margin-bottom:1rem}
 .alert-ok{background:#052e16;border:1px solid var(--green);color:#86efac}
 .alert-err{background:#450a0a;border:1px solid var(--red);color:#fca5a5}
 .alert-info{background:#0c1a3a;border:1px solid var(--accent);color:#93c5fd}
 
-/* MODE TABS */
 .mtabs{display:flex;gap:.4rem;margin-bottom:1rem}
 .mtab{padding:.45rem .9rem;border-radius:.5rem;border:1px solid var(--border);cursor:pointer;font-size:.85rem;color:var(--muted)}
 .mtab.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
-/* TABLE */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:.875rem}
 th{color:var(--muted);font-weight:600;padding:.6rem .75rem;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
 td{padding:.6rem .75rem;border-bottom:1px solid var(--border)}
 tr:last-child td{border:none}
 
-/* BADGES */
 .badge{padding:.2rem .55rem;border-radius:1rem;font-size:.72rem;font-weight:700}
 .badge-private{background:#0c1a3a;color:#93c5fd}
 .badge-group{background:#052e16;color:#86efac}
 .badge-supergroup{background:#1c1408;color:#fcd34d}
 .badge-channel{background:#2d0a0a;color:#fca5a5}
 
-/* PROGRESS */
 .prog-wrap{background:var(--surface2);border-radius:1rem;height:8px;overflow:hidden}
 .prog{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:1rem;transition:width .4s}
 
-/* FILE TREE */
 .tree-cat{background:var(--surface2);border:1px solid var(--border);border-radius:.75rem;overflow:hidden;margin-bottom:.75rem}
 .tree-cat-header{padding:.6rem 1rem;background:rgba(59,130,246,.1);display:flex;justify-content:space-between;align-items:center;font-weight:600;color:var(--accent);font-size:.9rem}
 .tree-file{padding:.5rem 1rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:.875rem}
-
-/* DIVIDER */
-hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
 </style>
 </head>
 <body>
 
-
-<!-- TOPBAR -->
 <div class="topbar">
   <h1>🤖 Telegram Bot</h1>
   <div class="online"><div class="dot"></div><span id="botName">Online</span></div>
 </div>
 
-<!-- LAYOUT -->
 <div class="wrapper">
   <nav class="sidebar">
     <div class="nav-item active" onclick="go('overview',this)"><span class="nav-icon">📊</span> Overview</div>
@@ -919,7 +884,6 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
   <main>
     <div id="globalAlert"></div>
 
-    <!-- OVERVIEW -->
     <div class="page active" id="page-overview">
       <div class="page-title">📊 Overview</div>
       <div class="stats-row">
@@ -936,7 +900,6 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
       </div>
     </div>
 
-    <!-- BROADCAST -->
     <div class="page" id="page-broadcast">
       <div class="page-title">📢 Kirim Broadcast</div>
       <div class="card">
@@ -986,7 +949,6 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
       </div>
     </div>
 
-    <!-- CHATS -->
     <div class="page" id="page-chats">
       <div class="page-title">💬 Chat List</div>
       <div class="card">
@@ -999,7 +961,6 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
       </div>
     </div>
 
-    <!-- FILES -->
     <div class="page" id="page-files">
       <div class="page-title">📁 File Manager</div>
 
@@ -1039,7 +1000,6 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
       </div>
     </div>
 
-    <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="page-title">⚙️ Pengaturan</div>
 
@@ -1061,18 +1021,15 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
         <button class="btn btn-primary btn-sm" onclick="saveSetting('latest_announcement','sAnn','Pengumuman')">Simpan</button>
       </div>
     </div>
-
   </main>
 </div>
 
 <script>
-// Auth key sudah divalidasi server-side, embed langsung di sini
 const K = '${k}';
 const ORIGIN = '${origin}';
 const BASE = ORIGIN + '/api';
 let allChats = [], curMode = 'text';
 
-// Semua API call pakai query param ?k=
 function api(path, opts){
   const sep = path.includes('?') ? '&' : '?';
   return fetch(BASE+'/'+path+sep+'k='+encodeURIComponent(K), opts||{});
@@ -1084,9 +1041,6 @@ function apiJ(path, body){
     body: body !== undefined ? JSON.stringify(body) : undefined
   }).then(function(r){ return r.json(); });
 }
-
-
-function h(){ return {'Content-Type':'application/json','X-Dashboard-Password':pw}; }
 
 // ── INIT ──
 function init(){
@@ -1168,16 +1122,19 @@ function loadFiles(){
 }
 function renderTree(menu){
   var el=document.getElementById('fileTree');
-  var cats=Object.keys(menu);
+  var cats = Object.keys(menu);
   if(!cats.length){el.innerHTML='<p style="color:var(--muted);font-size:.9rem">Belum ada kategori.</p>';return;}
   el.innerHTML=cats.map(function(cat){
     var vers=Object.keys(menu[cat]);
+    var safeCat = encodeURIComponent(cat);
     return '<div class="tree-cat">'+
       '<div class="tree-cat-header"><span>📁 '+esc(cat)+'</span>'+
-      '<button class="btn btn-danger btn-sm" onclick="delCat(this,\''+esc(cat).replace(/'/g,'\\x27')+'\')">🗑 Hapus</button></div>'+
-      (vers.length?vers.map(function(v){return '<div class="tree-file"><span>📦 '+esc(v)+' <small style="color:var(--muted)">['+menu[cat][v].file_type+']</small></span>'+
-        '<button class="btn btn-danger btn-sm" onclick="delFile(this,\''+esc(cat).replace(/'/g,'\\x27')+'\',\''+esc(v).replace(/'/g,'\\x27')+'\')">🗑</button></div>';}).join(''):
-        '<div class="tree-file" style="color:var(--muted)">Belum ada file.</div>')+
+      '<button class="btn btn-danger btn-sm" onclick="delCat(this,decodeURIComponent(\''+safeCat+'\'))">🗑 Hapus</button></div>'+
+      (vers.length?vers.map(function(v){
+        var safeVer = encodeURIComponent(v);
+        return '<div class="tree-file"><span>📦 '+esc(v)+' <small style="color:var(--muted)">['+menu[cat][v].file_type+']</small></span>'+
+        '<button class="btn btn-danger btn-sm" onclick="delFile(this,decodeURIComponent(\''+safeCat+'\'),decodeURIComponent(\''+safeVer+'\'))">🗑</button></div>';
+      }).join(''):'<div class="tree-file" style="color:var(--muted)">Belum ada file.</div>')+
     '</div>';
   }).join('');
 }
@@ -1291,21 +1248,18 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers":
-            "Content-Type, X-Dashboard-Password",
+          "Access-Control-Allow-Headers": "Content-Type, X-Dashboard-Password",
         },
       });
     }
 
     if (url.pathname === "/webhook") return handleWebhook(request, env);
 
-    // Dashboard: cek ?k= param untuk auth
     if (url.pathname === "/dashboard") {
       const k = url.searchParams.get("k");
       if (k && k === env.DASHBOARD_PASSWORD) {
@@ -1313,7 +1267,6 @@ export default {
           headers: { "Content-Type": "text/html;charset=UTF-8" },
         });
       }
-      // Tampilkan halaman login HTML murni (tanpa JS)
       return new Response(loginHTML(url.origin), {
         headers: { "Content-Type": "text/html;charset=UTF-8" },
       });
@@ -1322,7 +1275,6 @@ export default {
     if (url.pathname.startsWith("/api/"))
       return handleAPI(request, env, url);
 
-    // Default → redirect ke dashboard
     return Response.redirect(url.origin + "/dashboard", 302);
   },
 };
