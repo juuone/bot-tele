@@ -582,6 +582,16 @@ function json(data, status = 200) {
 async function handleAPI(request, env, url) {
   const path = url.pathname.replace(/^\/api\//, "");
 
+  // Endpoint publik: cek apakah config sudah di-set (tidak perlu login)
+  if (path === "check-config") {
+    return json({
+      pw_set: !!env.DASHBOARD_PASSWORD,
+      pw_len: env.DASHBOARD_PASSWORD?.length || 0,
+      token_set: !!env.BOT_TOKEN,
+      kv_set: !!env.BOT_KV,
+    });
+  }
+
   // Verify endpoint (cek password saja)
   if (path === "verify") {
     if (!checkAuth(request, env)) return json({ ok: false });
@@ -754,8 +764,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 a{color:var(--accent);text-decoration:none}
 
 /* LOGIN */
-#overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999}
-.login-box{background:var(--surface);border:1px solid var(--border);border-radius:1.5rem;padding:2.5rem;width:min(400px,90vw)}
+#overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:flex-start;justify-content:center;z-index:999;overflow-y:auto;padding:2rem 0}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:1.5rem;padding:2rem;width:min(400px,90vw);margin:auto}
 .login-box h1{font-size:1.5rem;color:var(--accent);margin-bottom:.25rem;text-align:center}
 .login-box p{color:var(--muted);text-align:center;margin-bottom:1.5rem;font-size:.9rem}
 .logo{font-size:3rem;text-align:center;margin-bottom:1rem}
@@ -853,12 +863,14 @@ hr{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
     <div class="logo">🤖</div>
     <h1>Bot Dashboard</h1>
     <p>Masukkan password untuk melanjutkan</p>
+    <div id="loginErr" style="margin-bottom:.75rem;display:none" class="alert alert-err"></div>
+    <div id="loginInfo" style="margin-bottom:.75rem;display:none" class="alert alert-info"></div>
     <div class="fg">
       <label>Password</label>
       <input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
     </div>
-    <button class="btn btn-primary" style="width:100%" onclick="login()">Masuk →</button>
-    <div id="loginErr" style="margin-top:.75rem;display:none" class="alert alert-err"></div>
+    <button class="btn btn-primary" id="loginBtn" style="width:100%;margin-bottom:.75rem" onclick="login()">Masuk →</button>
+    <button class="btn btn-ghost" style="width:100%;font-size:.8rem" onclick="checkPwSet()">🔍 Cek apakah password sudah di-set</button>
   </div>
 </div>
 
@@ -1032,21 +1044,47 @@ const BASE = '${origin}/api';
 let pw = '', allChats = [], curMode = 'text';
 
 // ── AUTH ──
+function showLoginMsg(msg, type){
+  const err = document.getElementById('loginErr');
+  const info = document.getElementById('loginInfo');
+  err.style.display = 'none'; info.style.display = 'none';
+  if(type === 'err'){ err.textContent = msg; err.style.display = 'block'; }
+  else { info.innerHTML = msg; info.style.display = 'block'; }
+  // scroll to top of overlay so message is visible
+  document.getElementById('overlay').scrollTop = 0;
+}
 function login(){
+  const btn = document.getElementById('loginBtn');
   pw = document.getElementById('pwInput').value;
+  if(!pw){ showLoginMsg('Masukkan password dulu!','err'); return; }
+  btn.textContent = '⏳ Mengecek...'; btn.disabled = true;
   fetch(BASE+'/verify',{method:'POST',headers:h()})
-    .then(r=>r.json()).then(d=>{
+    .then(r=>r.json())
+    .then(d=>{
+      btn.textContent = 'Masuk →'; btn.disabled = false;
       if(d.ok){
         document.getElementById('overlay').style.display='none';
         init();
       } else {
-        const el=document.getElementById('loginErr');
-        el.textContent='Password salah!'; el.style.display='block';
+        showLoginMsg('❌ Password salah! Cek kembali di Cloudflare → Settings → Variables.','err');
         pw='';
       }
+    }).catch(e=>{
+      btn.textContent = 'Masuk →'; btn.disabled = false;
+      showLoginMsg('❌ Gagal koneksi. Pastikan Worker sudah di-deploy. Error: '+e.message,'err');
+    });
+}
+function checkPwSet(){
+  fetch(BASE+'/check-config')
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.pw_set){
+        showLoginMsg('✅ DASHBOARD_PASSWORD <b>sudah di-set</b> ('+d.pw_len+' karakter). Pastikan password yang kamu ketik sama persis.','info');
+      } else {
+        showLoginMsg('❌ DASHBOARD_PASSWORD <b>belum di-set</b>! Pergi ke Cloudflare → Worker → Settings → Variables and Secrets → tambah DASHBOARD_PASSWORD → Save and deploy.','err');
+      }
     }).catch(()=>{
-      const el=document.getElementById('loginErr');
-      el.textContent='Gagal koneksi ke server.'; el.style.display='block';
+      showLoginMsg('❌ Tidak bisa cek. Worker mungkin error.','err');
     });
 }
 
