@@ -108,7 +108,7 @@ function backKeyboard(target = "menu:main") {
 
 async function cmdStart(token, chat, user, env) {
   await addChat(env, chat);
-  const name = user.first_name || user.username || "sana";
+  const name = user.first_name || user.username || "Sana";
   await TG(token, "sendMessage", {
     chat_id: chat.id,
     parse_mode: "HTML",
@@ -145,7 +145,7 @@ async function cmdBroadcast(token, msg, env, isAdmin) {
       if (r.error_code === 403) await removeChat(env, c.id);
     }
   }
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: msg.chat.id,
     text: `✅ Broadcast selesai!\n📤 Berhasil: ${ok}\n❌ Gagal: ${fail}`,
   });
@@ -163,7 +163,7 @@ async function cmdStats(token, chatId, env, isAdmin) {
     (c) => c.type === "group" || c.type === "supergroup"
   ).length;
   const ch = chats.filter((c) => c.type === "channel").length;
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: chatId,
     parse_mode: "HTML",
     text: `📊 <b>Statistik Bot</b>\n\n👤 Users: ${u}\n👥 Groups: ${g}\n📢 Channels: ${ch}\n─────────\n📋 Total: ${chats.length}`,
@@ -183,7 +183,7 @@ async function cmdAddCat(token, chatId, text, env, isAdmin) {
     menu[name] = {};
     await saveMenu(env, menu);
   }
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: chatId,
     parse_mode: "HTML",
     text: `✅ Kategori "<b>${name}</b>" berhasil ditambahkan!`,
@@ -202,13 +202,13 @@ async function cmdDelCat(token, chatId, text, env, isAdmin) {
   if (menu[name]) {
     delete menu[name];
     await saveMenu(env, menu);
-    TG(token, "sendMessage", {
+    await TG(token, "sendMessage", {
       chat_id: chatId,
       parse_mode: "HTML",
       text: `✅ Kategori "<b>${name}</b>" dihapus.`,
     });
   } else {
-    TG(token, "sendMessage", {
+    await TG(token, "sendMessage", {
       chat_id: chatId,
       text: `❌ Kategori tidak ditemukan.`,
     });
@@ -227,7 +227,7 @@ async function cmdAddFile(token, chatId, userId, text, env, isAdmin) {
   const category = parts[0].trim();
   const version = parts[1].trim();
   await setPending(env, userId, { action: "add_file", category, version });
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: chatId,
     parse_mode: "HTML",
     text: `✅ Siap!\n📁 Kategori: <b>${category}</b>\n📦 Versi: <b>${version}</b>\n\nSekarang kirim file-nya (APK, video, foto, dll).`,
@@ -246,7 +246,7 @@ async function cmdListCat(token, chatId, env, isAdmin) {
   const list = cats
     .map((c, i) => `${i + 1}. ${c} (${Object.keys(menu[c]).length} file)`)
     .join("\n");
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: chatId,
     parse_mode: "HTML",
     text: `📋 <b>Kategori:</b>\n${list}`,
@@ -265,7 +265,7 @@ async function cmdHelp(token, chatId, isAdmin) {
       `/setinfo &lt;teks&gt; — Set info bot\n` +
       `/setyoutube &lt;teks&gt; — Set info YouTube`
     : "";
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: chatId,
     parse_mode: "HTML",
     text: `<b>📖 Bantuan</b>\n\n/start — Mulai bot & tampilkan menu\n/help — Tampilkan bantuan ini${adminCmds}`,
@@ -315,7 +315,7 @@ async function handleFileUpload(token, msg, env) {
   await saveMenu(env, menu);
   await setPending(env, userId, null);
 
-  TG(token, "sendMessage", {
+  await TG(token, "sendMessage", {
     chat_id: msg.chat.id,
     parse_mode: "HTML",
     text: `✅ File berhasil disimpan!\n📁 Kategori: <b>${pending.category}</b>\n📦 Versi: <b>${pending.version}</b>`,
@@ -327,6 +327,8 @@ async function handleFileUpload(token, msg, env) {
 
 async function handleCallback(token, query, env) {
   const { id, data, message } = query;
+  if (!message) return; // Mengantisipasi error jika message kosong di channel posts
+  
   const chatId = message.chat.id;
   const msgId = message.message_id;
 
@@ -433,7 +435,7 @@ async function handleCallback(token, query, env) {
         reply_markup: backKeyboard("menu:main"),
       });
     } catch {
-      TG(token, "sendMessage", {
+      await TG(token, "sendMessage", {
         chat_id: chatId,
         text: "❌ Gagal mengirim file. Coba lagi nanti.",
       });
@@ -473,7 +475,7 @@ async function handleWebhook(request, env) {
       const botId = me.result?.id;
       if (msg.new_chat_members.some((m) => m.id === botId)) {
         await addChat(env, chat);
-        TG(token, "sendMessage", {
+        await TG(token, "sendMessage", {
           chat_id: chat.id,
           text: "👋 Halo! Bot sudah aktif di sini dan akan menerima siaran pengumuman dari admin.",
         });
@@ -518,14 +520,14 @@ async function handleWebhook(request, env) {
     } else if (text.match(/^\/setinfo/i) && isAdmin) {
       const val = text.replace(/^\/setinfo\s*/i, "").trim();
       await env.BOT_KV.put("bot_info", val);
-      TG(token, "sendMessage", {
+      await TG(token, "sendMessage", {
         chat_id: chat.id,
         text: "✅ Info bot diperbarui!",
       });
     } else if (text.match(/^\/setyoutube/i) && isAdmin) {
       const val = text.replace(/^\/setyoutube\s*/i, "").trim();
       await env.BOT_KV.put("youtube_info", val);
-      TG(token, "sendMessage", {
+      await TG(token, "sendMessage", {
         chat_id: chat.id,
         text: "✅ Info YouTube diperbarui!",
       });
@@ -566,6 +568,8 @@ function json(data, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, X-Dashboard-Password",
     },
   });
 }
