@@ -96,7 +96,7 @@ function catKB(menu) {
   return { inline_keyboard: rows };
 }
 
-// FIX: Gunakan || sebagai separator agar aman dari : di nama kategori
+// FIX #1: Gunakan || sebagai separator agar aman dari : di nama kategori
 function verKB(cat, vers) {
   const rows = Object.keys(vers).map(v => [{ text: "📦 " + v, callback_data: "f:" + cat + "||" + v }]);
   rows.push([{ text: "🔙 Kembali", callback_data: "menu:apps" }]);
@@ -176,7 +176,6 @@ async function handleCB(token, q, env, adminId) {
 
   const edit = (text, kb) => TG(token, "editMessageText", { chat_id: chatId, message_id: msgId, text, parse_mode: "HTML", reply_markup: kb });
 
-  // Custom command trigger
   if (data.startsWith("cmd:")) {
     const trigger = data.slice(4);
     const cfg = await getCfg(env);
@@ -211,11 +210,11 @@ async function handleCB(token, q, env, adminId) {
     return edit("📂 <b>"+cat+"</b>\n\nPilih versi yang ingin diunduh:", verKB(cat, vers));
   }
 
-  // FIX: Parse file callback dengan separator || agar aman dari : di nama kategori
+  // FIX #2: Parse file callback dengan separator ||
   if (data.startsWith("f:")) {
     const rest = data.slice(2);
     const sepIdx = rest.indexOf("||");
-    if (sepIdx === -1) return TG(token, "sendMessage", { chat_id: chatId, text: "❌ Format callback tidak valid." });
+    if (sepIdx === -1) return TG(token, "sendMessage", { chat_id: chatId, text: "❌ Format tidak valid." });
     const cat = rest.slice(0, sepIdx);
     const ver = rest.slice(sepIdx + 2);
     const menu = await getMenu(env), file = menu[cat] && menu[cat][ver];
@@ -231,7 +230,6 @@ async function handleCB(token, q, env, adminId) {
     } catch { return TG(token, "sendMessage", { chat_id: chatId, text: "❌ Gagal mengirim file." }); }
   }
 
-  // ADMIN ONLY
   if (!isAdmin) return;
 
   if (data === "admin:main") {
@@ -292,24 +290,17 @@ async function handleWebhook(req, env) {
     const msg = u.message, chat = msg.chat, user = msg.from;
     const isAdmin = String(user && user.id) === adminId, text = msg.text || "";
 
-    // FIX: Panggil getMe sekali saja jika diperlukan
-    let botId = null;
-    if (msg.new_chat_members || msg.left_chat_member) {
-      try {
-        const me = await TG(token, "getMe");
-        botId = me.result && me.result.id;
-      } catch { /* ignore */ }
-    }
-
-    if (msg.new_chat_members && botId) {
-      if (msg.new_chat_members.some(m => m.id === botId)) {
+    if (msg.new_chat_members) {
+      const me = await TG(token, "getMe");
+      if (msg.new_chat_members.some(m => m.id === (me.result && me.result.id))) {
         await addChat(env, chat);
-        await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-          text: "👋 <b>MCPatch Bot aktif!</b>\nGrup ini akan menerima pengumuman dari admin.\n🌐 mcpatch.me" }).catch(()=>{});
+        TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+          text: "👋 <b>MCPatch Bot aktif!</b>\nGrup ini akan menerima pengumuman dari admin.\n🌐 mcpatch.me" });
       }
     }
-    if (msg.left_chat_member && botId) {
-      if (msg.left_chat_member.id === botId) await removeChat(env, chat.id);
+    if (msg.left_chat_member) {
+      const me = await TG(token, "getMe");
+      if (msg.left_chat_member.id === (me.result && me.result.id)) await removeChat(env, chat.id);
     }
 
     const handled = await handlePending(token, msg, env, adminId);
@@ -317,11 +308,10 @@ async function handleWebhook(req, env) {
 
     const cfg = await getCfg(env);
 
-    // Custom command check
     for (const [trigger, resp] of Object.entries(cfg.custom_commands || {})) {
       if (text.toLowerCase() === trigger.toLowerCase() || text.toLowerCase().startsWith(trigger.toLowerCase()+" ")) {
         await addChat(env, chat);
-        await TG(token, "sendMessage", { chat_id: chat.id, text: resp, parse_mode: "HTML" }).catch(()=>{});
+        TG(token, "sendMessage", { chat_id: chat.id, text: resp, parse_mode: "HTML" });
         return new Response("OK");
       }
     }
@@ -332,43 +322,43 @@ async function handleWebhook(req, env) {
       const chats = await getChats(env);
       const joinDate = chats[String(user.id)] && chats[String(user.id)].added_at ? fmtDate(chats[String(user.id)].added_at) : "Hari ini";
       const status = isAdmin ? "👑 Administrator" : "⭐ Pengguna Standar";
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
         text: "✨ <b>Selamat Datang di MCPatch Bot!</b>\n\n━━━━━━━━━━━━━━━━━━━━\n👤 <b>Profil Kamu</b>\n━━━━━━━━━━━━━━━━━━━━\n"+
           "🏷️ <b>Nama</b>         : "+name+"\n🔖 <b>Username</b>   : "+(user.username?"@"+user.username:"Tidak disetel")+"\n"+
           "🪪 <b>ID Telegram</b>  : <code>"+user.id+"</code>\n🎖️ <b>Status</b>       : "+status+"\n📅 <b>Bergabung</b>  : "+joinDate+"\n━━━━━━━━━━━━━━━━━━━━\n\n"+
           "Selamat datang! Gunakan menu di bawah untuk menjelajahi semua fitur yang tersedia. 🚀",
-        reply_markup: buildMainKeyboard(cfg) }).catch(()=>{});
+        reply_markup: buildMainKeyboard(cfg) });
     } else if (text.match(/^\/admin/i)) {
       if (!isAdmin) return TG(token, "sendMessage", { chat_id: chat.id, text: "⛔ Akses ditolak." });
       const chats = Object.values(await getChats(env));
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
         text: "⚙️ <b>Panel Administrator</b>\n\n📊 Pengguna: <b>"+chats.filter(c=>c.type==="private").length+"</b> | Grup: <b>"+chats.filter(c=>c.type==="group"||c.type==="supergroup").length+"</b> | Channel: <b>"+chats.filter(c=>c.type==="channel").length+"</b>\n\nPilih aksi:",
-        reply_markup: adminKB() }).catch(()=>{});
+        reply_markup: adminKB() });
     } else if (text.match(/^\/broadcast /i) && isAdmin) {
       const bc = text.replace(/^\/broadcast /i,"").trim();
       const { ok, fail } = await broadcast(token, env, bc, "text");
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Broadcast selesai!\n📤 Berhasil: <b>"+ok+"</b>  ❌ Gagal: <b>"+fail+"</b>" }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Broadcast selesai!\n📤 Berhasil: <b>"+ok+"</b>  ❌ Gagal: <b>"+fail+"</b>" });
     } else if (text.match(/^\/addcat /i) && isAdmin) {
       const name = text.replace(/^\/addcat /i,"").trim();
       const menu = await getMenu(env); if (!menu[name]) { menu[name] = {}; await saveMenu(env, menu); }
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> ditambahkan!" }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> ditambahkan!" });
     } else if (text.match(/^\/delcat /i) && isAdmin) {
       const name = text.replace(/^\/delcat /i,"").trim();
       const menu = await getMenu(env); delete menu[name]; await saveMenu(env, menu);
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> dihapus." }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> dihapus." });
     } else if (text.match(/^\/addfile /i) && isAdmin) {
       const raw = text.replace(/^\/addfile /i,"").trim(), pts = raw.split("|");
       if (pts.length < 2) return TG(token, "sendMessage", { chat_id: chat.id, text: "Format: /addfile <kategori> | <versi>" });
       await setPending(env, String(user.id), { action: "add_file", cat: pts[0].trim(), ver: pts[1].trim() });
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Siap! Kirim file untuk:\n📁 <b>"+pts[0].trim()+"</b> — <b>"+pts[1].trim()+"</b>" }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Siap! Kirim file untuk:\n📁 <b>"+pts[0].trim()+"</b> — <b>"+pts[1].trim()+"</b>" });
     } else if (text.match(/^\/listcat/i) && isAdmin) {
       const menu = await getMenu(env), cats = Object.keys(menu);
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-        text: cats.length ? "📋 <b>Kategori:</b>\n"+cats.map((c,i)=>(i+1)+". "+c+" ("+Object.keys(menu[c]).length+" file)").join("\n") : "Belum ada kategori." }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+        text: cats.length ? "📋 <b>Kategori:</b>\n"+cats.map((c,i)=>(i+1)+". "+c+" ("+Object.keys(menu[c]).length+" file)").join("\n") : "Belum ada kategori." });
     } else if (text.match(/^\/help/i)) {
       const adm = isAdmin ? "\n\n<b>🔑 Admin:</b>\n/admin — Panel admin\n/broadcast &lt;pesan&gt; — Broadcast\n/addcat /delcat /addfile /listcat" : "";
-      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-        text: "<b>📖 Bantuan MCPatch Bot</b>\n\n/start — Menu utama\n/menu — Menu utama\n/help — Bantuan ini"+adm }).catch(()=>{});
+      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+        text: "<b>📖 Bantuan MCPatch Bot</b>\n\n/start — Menu utama\n/menu — Menu utama\n/help — Bantuan ini"+adm });
     }
   }
 
@@ -516,150 +506,56 @@ function loginHTML(origin) {
 
 // ── DASHBOARD ─────────────────────────────────────────────────
 function dashboardHTML(origin, k) {
-  var ek = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'');
+  var ek = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   var C = 'var K=\''+ek+'\',ORIGIN=\''+origin+'\',BASE=ORIGIN+\'/api\',allChats=[],curMode=\'text\',editChatId=null,editFileData=null;';
 
-  var apiFn = 'function api(p,b){var s=p.indexOf(\'?\')>-1?\'&\':\'?\';'
-    +'return fetch(BASE+\'/\'+p+s+\'k=\'+encodeURIComponent(K),b).then(function(r){return r.json();});}'
+  var apiFn = 'function api(p,b){var s=p.indexOf(\'?\')>-1?\'&\':\'?\';return fetch(BASE+\'/\'+p+s+\'k=\'+encodeURIComponent(K),b).then(function(r){return r.json();});}'
     +'function apiG(p){return api(p,{method:\'GET\'});}'
     +'function apiP(p,d){return api(p,{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify(d)});}';
 
   var utilFn = 'function esc(s){return String(s||\'\').replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\').replace(/>/g,\'&gt;\').replace(/"/g,\'&quot;\');}'
     +'function alert2(m,t){var b=document.getElementById(\'ga\');b.innerHTML=\'<div class="alert alert-\'+(t||\'ok\')+\'">\'+(m)+\'</div>\';setTimeout(function(){b.innerHTML=\'\';},4000);}'
-    +'function go(p){document.querySelectorAll(\'.nav\').forEach(function(n){n.classList.remove(\'active\');});'
-    +'document.querySelectorAll(\'.page\').forEach(function(x){x.classList.remove(\'active\');});'
-    +'var ni=document.getElementById(\'n-\'+p);if(ni)ni.classList.add(\'active\');'
-    +'var pi=document.getElementById(\'p-\'+p);if(pi)pi.classList.add(\'active\');'
-    +'var loaders={chats:loadChats,files:loadFiles,content:loadContent,menu:loadMenu,commands:loadCommands};'
-    +'if(loaders[p])loaders[p]();}';
+    +'function go(p){document.querySelectorAll(\'.nav\').forEach(function(n){n.classList.remove(\'active\');});document.querySelectorAll(\'.page\').forEach(function(x){x.classList.remove(\'active\');});var ni=document.getElementById(\'n-\'+p);if(ni)ni.classList.add(\'active\');var pi=document.getElementById(\'p-\'+p);if(pi)pi.classList.add(\'active\');var loaders={chats:loadChats,files:loadFiles,content:loadContent,menu:loadMenu,commands:loadCommands};if(loaders[p])loaders[p]();}';
 
-  var statsFn = 'function loadStats(){apiG(\'chats\').then(function(d){if(!d.ok)return;'
-    +'var cs=Object.values(d.chats);allChats=cs;'
-    +'document.getElementById(\'st0\').textContent=cs.length;'
-    +'document.getElementById(\'st1\').textContent=cs.filter(function(c){return c.type===\'private\';}).length;'
-    +'document.getElementById(\'st2\').textContent=cs.filter(function(c){return c.type===\'group\'||c.type===\'supergroup\';}).length;'
-    +'document.getElementById(\'st3\').textContent=cs.filter(function(c){return c.type===\'channel\';}).length;'
-    +'}).catch(function(){});}';
+  var statsFn = 'function loadStats(){apiG(\'chats\').then(function(d){if(!d.ok)return;var cs=Object.values(d.chats);allChats=cs;document.getElementById(\'st0\').textContent=cs.length;document.getElementById(\'st1\').textContent=cs.filter(function(c){return c.type===\'private\';}).length;document.getElementById(\'st2\').textContent=cs.filter(function(c){return c.type===\'group\'||c.type===\'supergroup\';}).length;document.getElementById(\'st3\').textContent=cs.filter(function(c){return c.type===\'channel\';}).length;}).catch(function(){});}';
 
   var chatFn = 'function loadChats(){apiG(\'chats\').then(function(d){if(!d.ok)return;allChats=Object.values(d.chats);renderChats(allChats);});}'
     +'function filterChats(){var q=document.getElementById(\'cq\').value.toLowerCase();renderChats(allChats.filter(function(c){return(c.title||c.display_name||\'\').toLowerCase().indexOf(q)>-1||(c.username||\'\').toLowerCase().indexOf(q)>-1||String(c.id).indexOf(q)>-1;}));}'
-    +'function renderChats(list){'
-    +'var el=document.getElementById(\'chatTbl\');'
-    +'if(!list.length){el.innerHTML=\'<div class="empty">Belum ada chat terdaftar. Coba kirim /start ke bot.</div>\';return;}'
-    +'el.innerHTML=\'<div class="tbl-wrap"><table><thead><tr><th>Nama</th><th>Tipe</th><th>Username</th><th>Notes</th><th>Bergabung</th><th>Aksi</th></tr></thead><tbody>\''
-    +'+list.map(function(c){return\'<tr>\''
-    +'+ \'<td><b>\'+esc(c.display_name||c.title||\'?\')+ \'</b><br><small style="color:var(--m)">\'+c.id+\'</small></td>\''
-    +'+ \'<td><span class="badge badge-\'+c.type+\'">\'+c.type+\'</span></td>\''
-    +'+ \'<td style="color:var(--m)">\'+( c.username ? \'@\'+c.username : \'-\')+\'</td>\''
-    +'+ \'<td style="font-size:.78rem;max-width:120px;word-break:break-word">\'+esc(c.notes||\'\') +\'</td>\''
-    +'+ \'<td style="font-size:.75rem;color:var(--m);white-space:nowrap">\'+new Date(c.added_at).toLocaleDateString(\'id-ID\')+\'</td>\''
-    +'+ \'<td style="white-space:nowrap"><button class="btn btn-ghost btn-icon" onclick="openEditChat(\'+c.id+\')" title="Edit">✏️</button> \''
-    +'  + \'<button class="btn btn-danger btn-icon" onclick="delChat(\'+c.id+\')" title="Hapus">🗑</button></td></tr>\';})'
-    +'.join(\'\')+\'</tbody></table></div>\';}'
-    +'function openEditChat(id){'
-    +'var c=allChats.find(function(x){return x.id===id||x.id===String(id);});'
-    +'if(!c)return;editChatId=id;'
-    +'document.getElementById(\'editChatName\').value=c.display_name||c.title||\'\';'
-    +'document.getElementById(\'editChatNotes\').value=c.notes||\'\';'
-    +'document.getElementById(\'editChatModal\').style.display=\'flex\';}'
+    +'function renderChats(list){var el=document.getElementById(\'chatTbl\');if(!list.length){el.innerHTML=\'<div class="empty">Belum ada chat terdaftar.</div>\';return;}el.innerHTML=\'<div class="tbl-wrap"><table><thead><tr><th>Nama</th><th>Tipe</th><th>Username</th><th>Notes</th><th>Bergabung</th><th>Aksi</th></tr></thead><tbody>\'+list.map(function(c){return\'<tr><td><b>\'+esc(c.display_name||c.title||\'?\')+\'</b><br><small style="color:var(--m)">\'+c.id+\'</small></td><td><span class="badge badge-\'+c.type+\'">\'+c.type+\'</span></td><td style="color:var(--m)">\'+(c.username?\'@\'+c.username:\'-\')+\'</td><td style="font-size:.78rem;max-width:120px;word-break:break-word">\'+esc(c.notes||\'\')+\'</td><td style="font-size:.75rem;color:var(--m);white-space:nowrap">\'+new Date(c.added_at).toLocaleDateString(\'id-ID\')+\'</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-icon" onclick="openEditChat(\'+c.id+\')" title="Edit">✏️</button> <button class="btn btn-danger btn-icon" onclick="delChat(\'+c.id+\')" title="Hapus">🗑</button></td></tr>\';}).join(\'\')+\'</tbody></table></div>\';}'
+    +'function openEditChat(id){var c=allChats.find(function(x){return x.id===id||x.id===String(id);});if(!c)return;editChatId=id;document.getElementById(\'editChatName\').value=c.display_name||c.title||\'\';document.getElementById(\'editChatNotes\').value=c.notes||\'\';document.getElementById(\'editChatModal\').style.display=\'flex\';}'
     +'function closeEditChat(){document.getElementById(\'editChatModal\').style.display=\'none\';editChatId=null;}'
-    +'function saveEditChat(){if(!editChatId)return;'
-    +'var name=document.getElementById(\'editChatName\').value.trim();'
-    +'var notes=document.getElementById(\'editChatNotes\').value.trim();'
-    +'apiP(\'update-chat\',{id:editChatId,display_name:name,notes:notes}).then(function(d){'
-    +'if(d.ok){alert2(\'User diperbarui!\');closeEditChat();loadChats();loadStats();}else alert2(\'Gagal!\',\'err\');});}'
+    +'function saveEditChat(){if(!editChatId)return;var name=document.getElementById(\'editChatName\').value.trim();var notes=document.getElementById(\'editChatNotes\').value.trim();apiP(\'update-chat\',{id:editChatId,display_name:name,notes:notes}).then(function(d){if(d.ok){alert2(\'User diperbarui!\');closeEditChat();loadChats();loadStats();}else alert2(\'Gagal!\',\'err\');});}'
     +'function delChat(id){if(!confirm(\'Hapus chat \'+id+\'?\'))return;apiP(\'remove-chat\',{id:id}).then(function(d){if(d.ok){alert2(\'Dihapus.\');loadChats();loadStats();}else alert2(\'Gagal\',\'err\');});}';
 
   var fileFn = 'function loadFiles(){apiG(\'files\').then(function(d){if(!d.ok)return;renderTree(d.menu);var s=document.getElementById(\'fCat\');s.innerHTML=Object.keys(d.menu).map(function(c){return\'<option value="\'+esc(c)+\'">\'+esc(c)+\'</option>\';}).join(\'\');});}'
-    +'function renderTree(menu){'
-    +'var el=document.getElementById(\'ftree\');var cats=Object.keys(menu);'
-    +'if(!cats.length){el.innerHTML=\'<div class="empty">Belum ada kategori.</div>\';return;}'
-    +'el.innerHTML=cats.map(function(cat){'
-    +'var vers=Object.keys(menu[cat]);'
-    +'return\'<div class="tcat"><div class="tcath"><span>📂 \'+esc(cat)+\' <span class="chip">\'+vers.length+\'</span></span>\''
-    +'+ \'<button class="btn btn-danger btn-sm" onclick="delCat(\\\'\'+encodeURIComponent(cat)+\'\\\')">🗑 Hapus</button></div>\''
-    +'+(vers.length?vers.map(function(v){'
-    +'var f=menu[cat][v];'
-    +'return\'<div class="tfile"><div><b>📦 \'+esc(v)+\'</b> <small style="color:var(--m)">[\'+ f.file_type+\']</small>\''
-    +'+ (f.caption?\'<br><small style="color:var(--m)">\'+esc(f.caption.substring(0,60))+(f.caption.length>60?\'...\':\'\')+ \'</small>\':\'\') +\'</div>\''
-    +'+ \'<div style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditFile(\\\'\'+encodeURIComponent(cat)+\'\\\',\\\'\'+encodeURIComponent(v)+\'\\\',\\\'\'+encodeURIComponent(f.caption||\'\')+\'\\\')">✏️ Edit</button> \''
-    +'+ \'<button class="btn btn-danger btn-sm" onclick="delFile(\\\'\'+encodeURIComponent(cat)+\'\\\',\\\'\'+encodeURIComponent(v)+\'\\\')">🗑</button></div></div>\';})'
-    +'.join(\'\'):\'<div class="tfile" style="color:var(--m)">Belum ada file.</div>\')+\'</div>\';})'
-    +'.join(\'\');}'
-    +'function addCat(){var n=document.getElementById(\'newCat\').value.trim();if(!n)return alert2(\'Isi nama kategori!\',\'err\');'
-    +'apiP(\'add-cat\',{name:n}).then(function(d){if(d.ok){alert2(\'Kategori ditambahkan!\');document.getElementById(\'newCat\').value=\'\';loadFiles();}else alert2(\'Error\',\'err\');});}'
-    +'function delCat(enc){var n=decodeURIComponent(enc);if(!confirm(\'Hapus kategori "\'+n+\'" + semua file?\'))return;apiP(\'del-cat\',{name:n}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadFiles();}});}'
-    +'function addFile(){var cat=document.getElementById(\'fCat\').value,ver=document.getElementById(\'fVer\').value.trim(),fid=document.getElementById(\'fId\').value.trim(),ft=document.getElementById(\'fType\').value,cap=document.getElementById(\'fCap\').value.trim();'
-    +'if(!cat||!ver||!fid)return alert2(\'Lengkapi field!\',\'err\');'
-    +'apiP(\'add-file\',{cat:cat,ver:ver,file_id:fid,file_type:ft,caption:cap}).then(function(d){if(d.ok){alert2(\'File disimpan!\');loadFiles();}else alert2(\'Error: \'+d.error,\'err\');});}'
+    +'function renderTree(menu){var el=document.getElementById(\'ftree\');var cats=Object.keys(menu);if(!cats.length){el.innerHTML=\'<div class="empty">Belum ada kategori.</div>\';return;}el.innerHTML=cats.map(function(cat){var vers=Object.keys(menu[cat]);return\'<div class="tcat"><div class="tcath"><span>📂 \'+esc(cat)+\' <span class="chip">\'+vers.length+\'</span></span><button class="btn btn-danger btn-sm" onclick="delCat(\\\'\'+encodeURIComponent(cat)+\'\\\')">🗑 Hapus</button></div>\'+(vers.length?vers.map(function(v){var f=menu[cat][v];return\'<div class="tfile"><div><b>📦 \'+esc(v)+\'</b> <small style="color:var(--m)">[\'+f.file_type+\']</small>\'+(f.caption?\'<br><small style="color:var(--m)">\'+esc(f.caption.substring(0,60))+(f.caption.length>60?\'...\':\'\')+\'</small>\':\'\')+\'</div><div style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditFile(\\\'\'+encodeURIComponent(cat)+\'\\\',\\\'\'+encodeURIComponent(v)+\'\\\',\\\'\'+encodeURIComponent(f.caption||\'\')+\'\\\')">✏️ Edit</button> <button class="btn btn-danger btn-sm" onclick="delFile(\\\'\'+encodeURIComponent(cat)+\'\\\',\\\'\'+encodeURIComponent(v)+\'\\\')">🗑</button></div></div>\';}).join(\'\'):\'<div class="tfile" style="color:var(--m)">Belum ada file.</div>\')+\'</div>\';}).join(\'\');}'
+    +'function addCat(){var n=document.getElementById(\'newCat\').value.trim();if(!n)return alert2(\'Isi nama kategori!\',\'err\');apiP(\'add-cat\',{name:n}).then(function(d){if(d.ok){alert2(\'Kategori ditambahkan!\');document.getElementById(\'newCat\').value=\'\';loadFiles();}else alert2(\'Error\',\'err\');});}'
+    +'function delCat(enc){var n=decodeURIComponent(enc);if(!confirm(\'Hapus kategori "\'+n+\'"?\'))return;apiP(\'del-cat\',{name:n}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadFiles();}});}'
+    +'function addFile(){var cat=document.getElementById(\'fCat\').value,ver=document.getElementById(\'fVer\').value.trim(),fid=document.getElementById(\'fId\').value.trim(),ft=document.getElementById(\'fType\').value,cap=document.getElementById(\'fCap\').value.trim();if(!cat||!ver||!fid)return alert2(\'Lengkapi field!\',\'err\');apiP(\'add-file\',{cat:cat,ver:ver,file_id:fid,file_type:ft,caption:cap}).then(function(d){if(d.ok){alert2(\'File disimpan!\');loadFiles();}else alert2(\'Error\',\'err\');});}'
     +'function delFile(ce,ve){var cat=decodeURIComponent(ce),ver=decodeURIComponent(ve);if(!confirm(\'Hapus "\'+ver+\'"?\'))return;apiP(\'del-file\',{cat:cat,ver:ver}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadFiles();}});}'
-    +'function openEditFile(ce,ve,cape){'
-    +'editFileData={cat:decodeURIComponent(ce),ver:decodeURIComponent(ve)};'
-    +'document.getElementById(\'efVer\').value=decodeURIComponent(ve);'
-    +'document.getElementById(\'efCap\').value=decodeURIComponent(cape);'
-    +'document.getElementById(\'editFileModal\').style.display=\'flex\';}'
+    +'function openEditFile(ce,ve,cape){editFileData={cat:decodeURIComponent(ce),ver:decodeURIComponent(ve)};document.getElementById(\'efVer\').value=decodeURIComponent(ve);document.getElementById(\'efCap\').value=decodeURIComponent(cape);document.getElementById(\'editFileModal\').style.display=\'flex\';}'
     +'function closeEditFile(){document.getElementById(\'editFileModal\').style.display=\'none\';editFileData=null;}'
-    +'function saveEditFile(){if(!editFileData)return;'
-    +'var nv=document.getElementById(\'efVer\').value.trim(),cap=document.getElementById(\'efCap\').value.trim();'
-    +'apiP(\'edit-file\',{cat:editFileData.cat,ver:editFileData.ver,new_ver:nv,caption:cap}).then(function(d){'
-    +'if(d.ok){alert2(\'File diperbarui!\');closeEditFile();loadFiles();}else alert2(\'Gagal!\',\'err\');});}';
+    +'function saveEditFile(){if(!editFileData)return;var nv=document.getElementById(\'efVer\').value.trim(),cap=document.getElementById(\'efCap\').value.trim();apiP(\'edit-file\',{cat:editFileData.cat,ver:editFileData.ver,new_ver:nv,caption:cap}).then(function(d){if(d.ok){alert2(\'File diperbarui!\');closeEditFile();loadFiles();}else alert2(\'Gagal!\',\'err\');});}';
 
-  var contentFn = 'function loadContent(){apiG(\'cfg\').then(function(d){if(!d.ok)return;var c=d.cfg;'
-    +'document.getElementById(\'sAnn\').value=c.ann||\'\';'
-    +'document.getElementById(\'sYt\').value=c.youtube_info||\'\';'
-    +'document.getElementById(\'sInfo\').value=c.bot_info||\'\';});}'
-    +'function saveCfgKey(key,elId,label){var v=document.getElementById(elId).value;var d={};d[key]=v;'
-    +'apiP(\'save-cfg\',d).then(function(r){if(r.ok)alert2(label+\' disimpan! ✅\');else alert2(\'Gagal\',\'err\');});}'
-    +'function delCfgKey(key,elId,label){if(!confirm(\'Hapus \'+label+\'?\'))return;'
-    +'apiP(\'del-cfg\',{key:key}).then(function(d){if(d.ok){document.getElementById(elId).value=\'\';alert2(label+\' dihapus!\');}});}'
-    +'function saveAndBC(){var t=document.getElementById(\'sAnn\').value.trim();if(!t)return alert2(\'Tulis pengumuman dulu!\',\'err\');'
-    +'apiP(\'save-cfg\',{ann:t}).then(function(){apiP(\'broadcast\',{mode:\'text\',target:\'all\',text:t}).then(function(d){if(d.ok)alert2(\'📢 Disimpan & dikirim ke \'+d.success+\' penerima!\');else alert2(\'Disimpan, broadcast gagal\',\'err\');});});}'
+  var contentFn = 'function loadContent(){apiG(\'cfg\').then(function(d){if(!d.ok)return;var c=d.cfg;document.getElementById(\'sAnn\').value=c.ann||\'\';document.getElementById(\'sYt\').value=c.youtube_info||\'\';document.getElementById(\'sInfo\').value=c.bot_info||\'\';});}'
+    +'function saveCfgKey(key,elId,label){var v=document.getElementById(elId).value;var d={};d[key]=v;apiP(\'save-cfg\',d).then(function(r){if(r.ok)alert2(label+\' disimpan! ✅\');else alert2(\'Gagal\',\'err\');});}'
+    +'function delCfgKey(key,elId,label){if(!confirm(\'Hapus \'+label+\'?\'))return;apiP(\'del-cfg\',{key:key}).then(function(d){if(d.ok){document.getElementById(elId).value=\'\';alert2(label+\' dihapus!\');}});}'
+    +'function saveAndBC(){var t=document.getElementById(\'sAnn\').value.trim();if(!t)return alert2(\'Tulis pengumuman dulu!\',\'err\');apiP(\'save-cfg\',{ann:t}).then(function(){apiP(\'broadcast\',{mode:\'text\',target:\'all\',text:t}).then(function(d){if(d.ok)alert2(\'📢 Disimpan & dikirim ke \'+d.success+\' penerima!\');else alert2(\'Disimpan, broadcast gagal\',\'err\');});});}'
     +'function setMode(m){curMode=m;[\'text\',\'photo\',\'video\'].forEach(function(x){document.getElementById(\'m-\'+x).style.display=x===m?\'block\':\'none\';document.getElementById(\'mt-\'+x).classList.toggle(\'active\',x===m);});}'
-    +'function sendBC(){var t=document.getElementById(\'bcTarget\').value,p={mode:curMode,target:t};'
-    +'if(curMode===\'text\'){p.text=document.getElementById(\'bcText\').value.trim();if(!p.text)return alert2(\'Tulis pesan!\',\'err\');}'
-    +'else if(curMode===\'photo\'){p.photo=document.getElementById(\'bcPhoto\').value.trim();p.caption=document.getElementById(\'bcPC\').value.trim();if(!p.photo)return alert2(\'Isi URL foto!\',\'err\');}'
-    +'else{p.video=document.getElementById(\'bcVideo\').value.trim();p.caption=document.getElementById(\'bcVC\').value.trim();if(!p.video)return alert2(\'Isi URL video!\',\'err\');}'
-    +'document.getElementById(\'bcProg\').style.display=\'block\';document.getElementById(\'bcBar\').style.width=\'20%\';document.getElementById(\'bcSt\').textContent=\'Mengirim...\';'
-    +'apiP(\'broadcast\',p).then(function(d){document.getElementById(\'bcBar\').style.width=\'100%\';'
-    +'document.getElementById(\'bcSt\').textContent=d.ok?\'✅ Selesai! Berhasil: \'+d.success+\', Gagal: \'+d.failed:\'❌ Error: \'+d.error;'
-    +'if(d.ok)alert2(\'Broadcast selesai! \'+d.success+\' terkirim.\');else alert2(\'Gagal!\',\'err\');});}';
+    +'function sendBC(){var t=document.getElementById(\'bcTarget\').value,p={mode:curMode,target:t};if(curMode===\'text\'){p.text=document.getElementById(\'bcText\').value.trim();if(!p.text)return alert2(\'Tulis pesan!\',\'err\');}else if(curMode===\'photo\'){p.photo=document.getElementById(\'bcPhoto\').value.trim();p.caption=document.getElementById(\'bcPC\').value.trim();if(!p.photo)return alert2(\'Isi URL foto!\',\'err\');}else{p.video=document.getElementById(\'bcVideo\').value.trim();p.caption=document.getElementById(\'bcVC\').value.trim();if(!p.video)return alert2(\'Isi URL video!\',\'err\');}document.getElementById(\'bcProg\').style.display=\'block\';document.getElementById(\'bcBar\').style.width=\'20%\';document.getElementById(\'bcSt\').textContent=\'Mengirim...\';apiP(\'broadcast\',p).then(function(d){document.getElementById(\'bcBar\').style.width=\'100%\';document.getElementById(\'bcSt\').textContent=d.ok?\'✅ Selesai! Berhasil: \'+d.success+\', Gagal: \'+d.failed:\'❌ Error\';if(d.ok)alert2(\'Broadcast selesai!\');else alert2(\'Gagal!\',\'err\');});}';
 
   var menuFn = 'function loadMenu(){apiG(\'menu-buttons\').then(function(d){if(!d.ok)return;renderMenu(d.buttons);});}'
-    +'function renderMenu(buttons){'
-    +'var el=document.getElementById(\'btnList\');'
-    +'var fixed=[{text:\'📱 Download Aplikasi\',type:\'callback\',info:\'menu:apps\'},{text:\'📢 Pengumuman\',type:\'callback\',info:\'menu:announcements\'},{text:\'📺 Channel YouTube\',type:\'callback\',info:\'menu:youtube\'},{text:\'ℹ️ Tentang Kami\',type:\'callback\',info:\'menu:info\'},{text:\'🌐 Kunjungi mcpatch.me\',type:\'url\',info:\'https://mcpatch.me\'}];'
-    +'el.innerHTML=\'<div style="margin-bottom:.75rem"><small style="color:var(--m)">Tombol bawaan (tidak dapat dihapus):</small></div>\''
-    +'+fixed.map(function(b){return\'<div class="btnrow fixed"><span class="btntxt">\'+ esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(b.info)+\'</span></div>\';}).join(\'\')'
-    +'+(buttons.length ? \'<div style="margin:.75rem 0"><small style="color:var(--m)">Tombol custom:</small></div>\'+buttons.map(function(b,i){'
-    +'var info=b.type===\'url\'?b.url:b.type===\'callback\'?b.data:b.trigger;'
-    +'return\'<div class="btnrow"><span class="btntxt">\'+esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(info)+\'</span><button class="btn btn-danger btn-icon" onclick="delBtn(\'+ i +\')">🗑</button></div>\';}).join(\'\') : \'<div style="color:var(--m);font-size:.85rem;padding:.5rem 0">Belum ada tombol custom.</div>\')'
-    +';}'
-    +'function addBtn(){var text=document.getElementById(\'btnText\').value.trim(),type=document.getElementById(\'btnType\').value;'
-    +'if(!text)return alert2(\'Isi teks tombol!\',\'err\');'
-    +'var d={text:text,type:type};'
-    +'if(type===\'url\'){d.url=document.getElementById(\'btnUrl\').value.trim();if(!d.url)return alert2(\'Isi URL!\',\'err\');}'
-    +'else if(type===\'callback\'){d.data=document.getElementById(\'btnData\').value.trim();if(!d.data)return alert2(\'Isi callback data!\',\'err\');}'
-    +'else{d.trigger=document.getElementById(\'btnTrigger\').value.trim();d.response=document.getElementById(\'btnResponse\').value.trim();if(!d.trigger||!d.response)return alert2(\'Isi trigger & respons!\',\'err\');}'
-    +'apiP(\'add-button\',d).then(function(r){if(r.ok){alert2(\'Tombol ditambahkan!\');document.getElementById(\'btnText\').value=\'\';loadMenu();}else alert2(\'Error\',\'err\');});}'
+    +'function renderMenu(buttons){var el=document.getElementById(\'btnList\');var fixed=[{text:\'📱 Download Aplikasi\',type:\'callback\',info:\'menu:apps\'},{text:\'📢 Pengumuman\',type:\'callback\',info:\'menu:announcements\'},{text:\'📺 Channel YouTube\',type:\'callback\',info:\'menu:youtube\'},{text:\'ℹ️ Tentang Kami\',type:\'callback\',info:\'menu:info\'},{text:\'🌐 Kunjungi mcpatch.me\',type:\'url\',info:\'https://mcpatch.me\'}];el.innerHTML=\'<div style="margin-bottom:.75rem"><small style="color:var(--m)">Tombol bawaan:</small></div>\'+fixed.map(function(b){return\'<div class="btnrow fixed"><span class="btntxt">\'+esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(b.info)+\'</span></div>\';}).join(\'\')+(buttons.length?\'<div style="margin:.75rem 0"><small style="color:var(--m)">Tombol custom:</small></div>\'+buttons.map(function(b,i){var info=b.type===\'url\'?b.url:b.type===\'callback\'?b.data:b.trigger;return\'<div class="btnrow"><span class="btntxt">\'+esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(info)+\'</span><button class="btn btn-danger btn-icon" onclick="delBtn(\'+i+\')">🗑</button></div>\';}).join(\'\'):\'<div style="color:var(--m);font-size:.85rem;padding:.5rem 0">Belum ada tombol custom.</div>\');}'
+    +'function addBtn(){var text=document.getElementById(\'btnText\').value.trim(),type=document.getElementById(\'btnType\').value;if(!text)return alert2(\'Isi teks tombol!\',\'err\');var d={text:text,type:type};if(type===\'url\'){d.url=document.getElementById(\'btnUrl\').value.trim();if(!d.url)return alert2(\'Isi URL!\',\'err\');}else if(type===\'callback\'){d.data=document.getElementById(\'btnData\').value.trim();if(!d.data)return alert2(\'Isi callback data!\',\'err\');}else{d.trigger=document.getElementById(\'btnTrigger\').value.trim();d.response=document.getElementById(\'btnResponse\').value.trim();if(!d.trigger||!d.response)return alert2(\'Isi trigger & respons!\',\'err\');}apiP(\'add-button\',d).then(function(r){if(r.ok){alert2(\'Tombol ditambahkan!\');document.getElementById(\'btnText\').value=\'\';loadMenu();}else alert2(\'Error\',\'err\');});}'
     +'function delBtn(i){if(!confirm(\'Hapus tombol ini?\'))return;apiP(\'del-button\',{idx:i}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadMenu();}});}'
-    +'function toggleBtnFields(){var t=document.getElementById(\'btnType\').value;'
-    +'document.getElementById(\'fUrl\').style.display=t===\'url\'?\'block\':\'none\';'
-    +'document.getElementById(\'fCb\').style.display=t===\'callback\'?\'block\':\'none\';'
-    +'document.getElementById(\'fCmd\').style.display=t===\'command\'?\'block\':\'none\';}';
+    +'function toggleBtnFields(){var t=document.getElementById(\'btnType\').value;document.getElementById(\'fUrl\').style.display=t===\'url\'?\'block\':\'none\';document.getElementById(\'fCb\').style.display=t===\'callback\'?\'block\':\'none\';document.getElementById(\'fCmd\').style.display=t===\'command\'?\'block\':\'none\';}';
 
   var cmdFn = 'function loadCommands(){apiG(\'commands\').then(function(d){if(!d.ok)return;renderCommands(d.commands);});}'
-    +'function renderCommands(cmds){'
-    +'var el=document.getElementById(\'cmdList\');var keys=Object.keys(cmds);'
-    +'if(!keys.length){el.innerHTML=\'<div class="empty">Belum ada command custom.</div>\';return;}'
-    +'el.innerHTML=\'<table><thead><tr><th>Trigger</th><th>Respons</th><th></th></tr></thead><tbody>\''
-    +'+keys.map(function(k){return\'<tr><td><code>\'+esc(k)+\'</code></td><td style="font-size:.82rem;max-width:200px;word-break:break-word">\'+esc(cmds[k].substring(0,80))+(cmds[k].length>80?\'...\':\'\')+'
-    +'\'</td><td><button class="btn btn-danger btn-icon" onclick="delCmd(\\\'\'+encodeURIComponent(k)+\'\\\')">🗑</button></td></tr>\';}).join(\'\')+\'</tbody></table>\';}'
-    +'function addCmd(){var t=document.getElementById(\'cmdTrig\').value.trim(),r=document.getElementById(\'cmdResp\').value.trim();'
-    +'if(!t||!r)return alert2(\'Isi trigger & respons!\',\'err\');'
-    +'apiP(\'add-command\',{trigger:t,response:r}).then(function(d){if(d.ok){alert2(\'Command ditambahkan!\');document.getElementById(\'cmdTrig\').value=\'\';document.getElementById(\'cmdResp\').value=\'\';loadCommands();}});}'
+    +'function renderCommands(cmds){var el=document.getElementById(\'cmdList\');var keys=Object.keys(cmds);if(!keys.length){el.innerHTML=\'<div class="empty">Belum ada command custom.</div>\';return;}el.innerHTML=\'<table><thead><tr><th>Trigger</th><th>Respons</th><th></th></tr></thead><tbody>\'+keys.map(function(k){return\'<tr><td><code>\'+esc(k)+\'</code></td><td style="font-size:.82rem;max-width:200px;word-break:break-word">\'+esc(cmds[k].substring(0,80))+(cmds[k].length>80?\'...\':\'\')+\'</td><td><button class="btn btn-danger btn-icon" onclick="delCmd(\\\'\'+encodeURIComponent(k)+\'\\\')">🗑</button></td></tr>\';}).join(\'\')+\'</tbody></table>\';}'
+    +'function addCmd(){var t=document.getElementById(\'cmdTrig\').value.trim(),r=document.getElementById(\'cmdResp\').value.trim();if(!t||!r)return alert2(\'Isi trigger & respons!\',\'err\');apiP(\'add-command\',{trigger:t,response:r}).then(function(d){if(d.ok){alert2(\'Command ditambahkan!\');document.getElementById(\'cmdTrig\').value=\'\';document.getElementById(\'cmdResp\').value=\'\';loadCommands();}});}'
     +'function delCmd(enc){var t=decodeURIComponent(enc);if(!confirm(\'Hapus command "\'+t+\'"?\'))return;apiP(\'del-command\',{trigger:t}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadCommands();}});}';
 
-  // FIX: Tambahkan wh2 value di init
+  // FIX #3: Tambahkan wh2 value di init
   var initFn = 'function setupWebhook(){apiP(\'setup-webhook\',{}).then(function(d){if(d.ok)alert2(\'✅ Webhook aktif!\');else alert2(\'Gagal: \'+JSON.stringify(d.result),\'err\');});}'
     +'function init(){document.getElementById(\'wUrl\').value=ORIGIN+\'/webhook\';document.getElementById(\'wh2\').value=ORIGIN+\'/webhook\';document.getElementById(\'dashUrl\').value=ORIGIN+\'/dashboard?k=\'+encodeURIComponent(K);loadStats();}'
     +'window.onload=init;';
@@ -677,168 +573,58 @@ function dashboardHTML(origin, k) {
   +'.dot{width:6px;height:6px;background:var(--g);border-radius:50%;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}'
   +'.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 50px)}@media(max-width:720px){.layout{grid-template-columns:1fr}.sidebar{display:none}}'
   +'.sidebar{background:rgba(13,20,38,.7);border-right:1px solid var(--b);padding:1rem .75rem;overflow-y:auto}'
-  +'.sg{font-size:.65rem;font-weight:800;color:var(--m);letter-spacing:.1em;text-transform:uppercase;padding:.4rem .75rem;margin-top:.875rem;margin-bottom:.15rem}'
-  +'.sg:first-child{margin-top:0}'
+  +'.sg{font-size:.65rem;font-weight:800;color:var(--m);letter-spacing:.1em;text-transform:uppercase;padding:.4rem .75rem;margin-top:.875rem;margin-bottom:.15rem}.sg:first-child{margin-top:0}'
   +'.nav{display:flex;align-items:center;gap:.55rem;padding:.6rem .85rem;border-radius:.625rem;cursor:pointer;color:var(--m);font-size:.82rem;font-weight:500;transition:.15s;margin-bottom:.1rem;user-select:none}'
   +'.nav:hover{background:rgba(59,130,246,.08);color:var(--t)}.nav.active{background:rgba(59,130,246,.15);color:var(--a);font-weight:700}'
-  +'main{padding:1.5rem;overflow-y:auto}'
-  +'.page{display:none}.page.active{display:block}'
+  +'main{padding:1.5rem;overflow-y:auto}.page{display:none}.page.active{display:block}'
   +'.ph{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem}'
   +'.pt{font-size:1.15rem;font-weight:800;display:flex;align-items:center;gap:.4rem}.ps{font-size:.78rem;color:var(--m);margin-top:.2rem}'
   +'.card{background:var(--c);border:1px solid var(--b2);border-radius:.875rem;padding:1.25rem;margin-bottom:1rem}'
   +'.ct{font-size:.8rem;font-weight:700;color:var(--a);margin-bottom:1rem;display:flex;align-items:center;gap:.35rem;text-transform:uppercase;letter-spacing:.04em}'
   +'.sg2{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.875rem;margin-bottom:1.25rem}'
-  +'.stat{background:var(--c);border:1px solid var(--b2);border-radius:.75rem;padding:1rem;text-align:center;transition:.2s}'
-  +'.stat:hover{border-color:rgba(59,130,246,.3);transform:translateY(-2px)}'
-  +'.sn{font-size:1.85rem;font-weight:800;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent}'
-  +'.sl{font-size:.72rem;color:var(--m);margin-top:.2rem;font-weight:500}'
+  +'.stat{background:var(--c);border:1px solid var(--b2);border-radius:.75rem;padding:1rem;text-align:center;transition:.2s}.stat:hover{border-color:rgba(59,130,246,.3);transform:translateY(-2px)}'
+  +'.sn{font-size:1.85rem;font-weight:800;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent}.sl{font-size:.72rem;color:var(--m);margin-top:.2rem;font-weight:500}'
   +'label{display:block;font-size:.7rem;font-weight:700;color:var(--m);margin-bottom:.35rem;letter-spacing:.06em;text-transform:uppercase}'
   +'input,textarea,select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--b2);border-radius:.575rem;color:var(--t);padding:.65rem .875rem;font-size:.85rem;font-family:inherit;transition:.2s}'
   +'input:focus,textarea:focus,select:focus{outline:none;border-color:var(--a);box-shadow:0 0 0 3px rgba(59,130,246,.1)}'
   +'textarea{resize:vertical;min-height:90px}.fg{margin-bottom:.875rem}.row{display:flex;gap:.75rem;flex-wrap:wrap}.row .fg{flex:1;min-width:150px}'
-  +'.btn{padding:.6rem 1.1rem;border:none;border-radius:.575rem;cursor:pointer;font-size:.8rem;font-weight:700;font-family:inherit;transition:.15s;display:inline-flex;align-items:center;gap:.35rem}'
-  +'.btn:active{transform:scale(.97)}'
+  +'.btn{padding:.6rem 1.1rem;border:none;border-radius:.575rem;cursor:pointer;font-size:.8rem;font-weight:700;font-family:inherit;transition:.15s;display:inline-flex;align-items:center;gap:.35rem}.btn:active{transform:scale(.97)}'
   +'.btn-primary{background:linear-gradient(135deg,var(--a),var(--p));color:#fff}.btn-primary:hover{opacity:.9;box-shadow:0 4px 12px rgba(59,130,246,.35)}'
   +'.btn-success{background:linear-gradient(135deg,var(--g),#16a34a);color:#fff}.btn-success:hover{opacity:.9}'
   +'.btn-danger{background:rgba(239,68,68,.12);color:var(--r);border:1px solid rgba(239,68,68,.25)}.btn-danger:hover{background:var(--r);color:#fff;border-color:var(--r)}'
   +'.btn-ghost{background:rgba(255,255,255,.05);color:var(--t);border:1px solid var(--b2)}.btn-ghost:hover{border-color:var(--a);color:var(--a)}'
   +'.btn-sm{padding:.35rem .75rem;font-size:.75rem}.btn-icon{width:30px;height:30px;padding:0;justify-content:center;border-radius:.5rem}'
   +'.alert{padding:.75rem 1rem;border-radius:.575rem;font-size:.82rem;margin-bottom:.875rem;font-weight:500}'
-  +'.alert-ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac}'
-  +'.alert-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5}'
-  +'.alert-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:#93c5fd}'
+  +'.alert-ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac}.alert-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5}.alert-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:#93c5fd}'
   +'.mtabs{display:flex;gap:.35rem;margin-bottom:.875rem;flex-wrap:wrap}'
   +'.mtab{padding:.4rem .9rem;border-radius:.5rem;border:1px solid var(--b2);cursor:pointer;font-size:.78rem;font-weight:600;color:var(--m);transition:.15s;font-family:inherit}.mtab:hover{border-color:var(--a);color:var(--a)}.mtab.active{background:rgba(59,130,246,.15);border-color:var(--a);color:var(--a)}'
-  +'.tbl-wrap{overflow-x:auto;border-radius:.575rem}'
-  +'table{width:100%;border-collapse:collapse;font-size:.8rem}'
+  +'.tbl-wrap{overflow-x:auto;border-radius:.575rem}table{width:100%;border-collapse:collapse;font-size:.8rem}'
   +'th{color:var(--m);font-weight:700;padding:.6rem .9rem;border-bottom:1px solid var(--b2);text-align:left;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}'
   +'td{padding:.6rem .9rem;border-bottom:1px solid rgba(255,255,255,.035)}tr:last-child td{border:none}tr:hover td{background:rgba(255,255,255,.015)}'
-  +'.badge{padding:.15rem .55rem;border-radius:1rem;font-size:.67rem;font-weight:700}'
-  +'.badge-private{background:rgba(59,130,246,.15);color:#93c5fd}.badge-group{background:rgba(34,197,94,.15);color:#86efac}.badge-supergroup{background:rgba(245,158,11,.15);color:#fcd34d}.badge-channel{background:rgba(239,68,68,.15);color:#fca5a5}'
-  +'.chip{padding:.15rem .55rem;border-radius:1rem;font-size:.67rem;font-weight:700;background:rgba(255,255,255,.08);color:var(--m)}'
-  +'.chip-url{background:rgba(34,197,94,.12);color:#86efac}.chip-callback{background:rgba(59,130,246,.12);color:#93c5fd}.chip-command{background:rgba(245,158,11,.12);color:#fcd34d}'
-  +'.prog-wrap{background:rgba(255,255,255,.05);border-radius:1rem;height:5px;overflow:hidden}'
-  +'.prog{height:100%;background:linear-gradient(90deg,var(--a),var(--p));border-radius:1rem;transition:width .4s}'
-  +'.tcat{background:rgba(255,255,255,.025);border:1px solid var(--b2);border-radius:.75rem;overflow:hidden;margin-bottom:.625rem;transition:.15s}'
-  +'.tcat:hover{border-color:rgba(59,130,246,.2)}'
-  +'.tcath{padding:.6rem 1rem;background:rgba(59,130,246,.07);display:flex;justify-content:space-between;align-items:center}'
-  +'.tcath span{font-weight:700;color:var(--a);font-size:.82rem}'
+  +'.badge{padding:.15rem .55rem;border-radius:1rem;font-size:.67rem;font-weight:700}.badge-private{background:rgba(59,130,246,.15);color:#93c5fd}.badge-group{background:rgba(34,197,94,.15);color:#86efac}.badge-supergroup{background:rgba(245,158,11,.15);color:#fcd34d}.badge-channel{background:rgba(239,68,68,.15);color:#fca5a5}'
+  +'.chip{padding:.15rem .55rem;border-radius:1rem;font-size:.67rem;font-weight:700;background:rgba(255,255,255,.08);color:var(--m)}.chip-url{background:rgba(34,197,94,.12);color:#86efac}.chip-callback{background:rgba(59,130,246,.12);color:#93c5fd}.chip-command{background:rgba(245,158,11,.12);color:#fcd34d}'
+  +'.prog-wrap{background:rgba(255,255,255,.05);border-radius:1rem;height:5px;overflow:hidden}.prog{height:100%;background:linear-gradient(90deg,var(--a),var(--p));border-radius:1rem;transition:width .4s}'
+  +'.tcat{background:rgba(255,255,255,.025);border:1px solid var(--b2);border-radius:.75rem;overflow:hidden;margin-bottom:.625rem;transition:.15s}.tcat:hover{border-color:rgba(59,130,246,.2)}'
+  +'.tcath{padding:.6rem 1rem;background:rgba(59,130,246,.07);display:flex;justify-content:space-between;align-items:center}.tcath span{font-weight:700;color:var(--a);font-size:.82rem}'
   +'.tfile{padding:.5rem 1rem;border-top:1px solid rgba(255,255,255,.04);display:flex;justify-content:space-between;align-items:center;gap:.5rem;font-size:.8rem}'
-  +'.btnrow{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-radius:.5rem;border:1px solid var(--b2);margin-bottom:.35rem;flex-wrap:wrap}'
-  +'.btnrow.fixed{opacity:.6}.btntxt{font-weight:600;font-size:.82rem;flex:1;min-width:100px}'
-  +'.empty{text-align:center;padding:2rem;color:var(--m);font-size:.85rem}'
-  +'hr{border:none;border-top:1px solid var(--b2);margin:1rem 0}'
-  +'code{background:rgba(255,255,255,.07);padding:.15rem .4rem;border-radius:.35rem;color:#93c5fd;font-size:.8rem}'
-  +'.sw{display:flex;gap:.5rem;margin-bottom:.875rem}.sw input{flex:1}'
-  +'.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}'
-  +'.modal-box{background:#111827;border:1px solid var(--b);border-radius:1rem;padding:1.5rem;width:100%;max-width:420px}'
-  +'.modal-title{font-weight:800;font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}'
-  +'.close-btn{background:none;border:none;color:var(--m);font-size:1.25rem;cursor:pointer;line-height:1}'
-  +'</style>'
-
-  +'</head><body>'
-
+  +'.btnrow{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-radius:.5rem;border:1px solid var(--b2);margin-bottom:.35rem;flex-wrap:wrap}.btnrow.fixed{opacity:.6}.btntxt{font-weight:600;font-size:.82rem;flex:1;min-width:100px}'
+  +'.empty{text-align:center;padding:2rem;color:var(--m);font-size:.85rem}hr{border:none;border-top:1px solid var(--b2);margin:1rem 0}code{background:rgba(255,255,255,.07);padding:.15rem .4rem;border-radius:.35rem;color:#93c5fd;font-size:.8rem}.sw{display:flex;gap:.5rem;margin-bottom:.875rem}.sw input{flex:1}'
+  +'.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}.modal-box{background:#111827;border:1px solid var(--b);border-radius:1rem;padding:1.5rem;width:100%;max-width:420px}.modal-title{font-weight:800;font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}.close-btn{background:none;border:none;color:var(--m);font-size:1.25rem;cursor:pointer;line-height:1}'
+  +'</style></head><body>'
   +'<div class="top"><div class="brand"><svg viewBox="0 0 30 30" fill="none"><rect width="30" height="30" rx="7" fill="url(#tg)"/><path d="M7 15L11 11L15 15L19 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 19L11 15L15 19L19 15" stroke="rgba(255,255,255,.4)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="tg" x1="0" y1="0" x2="30" y2="30"><stop stop-color="#3b82f6"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs></svg><h1>MCPatch Dashboard</h1></div><div class="online"><div class="dot"></div>Online</div></div>'
-
-  +'<div class="layout">'
-  +'<nav class="sidebar">'
-  +'<div class="sg">Utama</div>'
-  +'<div class="nav active" id="n-overview" onclick="go(\'overview\')">📊 Overview</div>'
-  +'<div class="nav" id="n-broadcast" onclick="go(\'broadcast\')">📢 Broadcast</div>'
-  +'<div class="sg">Data</div>'
-  +'<div class="nav" id="n-chats" onclick="go(\'chats\')">👥 User List</div>'
-  +'<div class="nav" id="n-files" onclick="go(\'files\')">📁 File Manager</div>'
-  +'<div class="sg">Bot Config</div>'
-  +'<div class="nav" id="n-content" onclick="go(\'content\')">✏️ Atur Konten</div>'
-  +'<div class="nav" id="n-menu" onclick="go(\'menu\')">🔘 Menu Builder</div>'
-  +'<div class="nav" id="n-commands" onclick="go(\'commands\')">⚡ Auto Reply</div>'
-  +'<div class="sg">Sistem</div>'
-  +'<div class="nav" id="n-settings" onclick="go(\'settings\')">⚙️ Settings</div>'
-  +'</nav>'
-
+  +'<div class="layout"><nav class="sidebar"><div class="sg">Utama</div><div class="nav active" id="n-overview" onclick="go(\'overview\')">📊 Overview</div><div class="nav" id="n-broadcast" onclick="go(\'broadcast\')">📢 Broadcast</div><div class="sg">Data</div><div class="nav" id="n-chats" onclick="go(\'chats\')">👥 User List</div><div class="nav" id="n-files" onclick="go(\'files\')">📁 File Manager</div><div class="sg">Bot Config</div><div class="nav" id="n-content" onclick="go(\'content\')">✏️ Atur Konten</div><div class="nav" id="n-menu" onclick="go(\'menu\')">🔘 Menu Builder</div><div class="nav" id="n-commands" onclick="go(\'commands\')">⚡ Auto Reply</div><div class="sg">Sistem</div><div class="nav" id="n-settings" onclick="go(\'settings\')">⚙️ Settings</div></nav>'
   +'<main><div id="ga"></div>'
-
-  +'<div class="page active" id="p-overview"><div class="ph"><div><div class="pt">📊 Overview</div><div class="ps">Ringkasan statistik bot</div></div></div>'
-  +'<div class="sg2"><div class="stat"><div class="sn" id="st0">0</div><div class="sl">Total Chat</div></div><div class="stat"><div class="sn" id="st1">0</div><div class="sl">Pengguna</div></div><div class="stat"><div class="sn" id="st2">0</div><div class="sl">Grup</div></div><div class="stat"><div class="sn" id="st3">0</div><div class="sl">Channel</div></div></div>'
-  +'<div class="card"><div class="ct">🔗 Sistem</div>'
-  +'<div class="fg"><label>Webhook URL</label><div style="display:flex;gap:.4rem"><input id="wUrl" readonly><button class="btn btn-success btn-sm" onclick="setupWebhook()">⚡ Setup</button></div></div>'
-  +'<div class="fg"><label>Dashboard URL (Bookmark ini!)</label><input id="dashUrl" readonly></div></div></div>'
-
-  +'<div class="page" id="p-broadcast"><div class="ph"><div><div class="pt">📢 Broadcast</div><div class="ps">Kirim pesan ke semua atau filter target</div></div></div>'
-  +'<div class="card"><div class="ct">✏️ Buat Pesan</div>'
-  +'<div class="mtabs"><div class="mtab active" id="mt-text" onclick="setMode(\'text\')">📝 Teks</div><div class="mtab" id="mt-photo" onclick="setMode(\'photo\')">🖼️ Foto</div><div class="mtab" id="mt-video" onclick="setMode(\'video\')">🎬 Video</div></div>'
-  +'<div id="m-text"><div class="fg"><label>Pesan (HTML: &lt;b&gt;, &lt;i&gt;, &lt;a href&gt;)</label><textarea id="bcText" placeholder="Tulis pesan broadcast...&#10;Contoh: &lt;b&gt;🎉 Update!&lt;/b&gt; Versi baru tersedia!"></textarea></div></div>'
-  +'<div id="m-photo" style="display:none"><div class="fg"><label>URL Foto / File ID Telegram</label><input id="bcPhoto" placeholder="https://... atau file_id"></div><div class="fg"><label>Caption</label><textarea id="bcPC" style="min-height:60px"></textarea></div></div>'
-  +'<div id="m-video" style="display:none"><div class="fg"><label>URL Video / File ID Telegram</label><input id="bcVideo" placeholder="https://... atau file_id"></div><div class="fg"><label>Caption</label><textarea id="bcVC" style="min-height:60px"></textarea></div></div>'
-  +'<div class="row"><div class="fg"><label>Target</label><select id="bcTarget"><option value="all">🌐 Semua</option><option value="users">👤 Pengguna</option><option value="groups">👥 Grup</option><option value="channels">📢 Channel</option></select></div></div>'
-  +'<button class="btn btn-primary" onclick="sendBC()">📤 Kirim Sekarang</button>'
-  +'<div id="bcProg" style="display:none;margin-top:.875rem"><div style="font-size:.78rem;color:var(--m);margin-bottom:.4rem" id="bcSt"></div><div class="prog-wrap"><div class="prog" id="bcBar" style="width:0%"></div></div></div></div></div>'
-
-  +'<div class="page" id="p-chats"><div class="ph"><div><div class="pt">👥 User List</div><div class="ps">Semua pengguna, grup, dan channel terdaftar</div></div><button class="btn btn-ghost btn-sm" onclick="loadChats()">🔄 Refresh</button></div>'
-  +'<div class="card"><div class="sw"><input id="cq" placeholder="🔍 Cari nama, username, ID, atau notes..." oninput="filterChats()"></div>'
-  +'<div id="chatTbl"><div class="empty">Memuat...</div></div></div></div>'
-
-  +'<div class="page" id="p-files"><div class="ph"><div><div class="pt">📁 File Manager</div><div class="ps">Kelola kategori dan file distribusi aplikasi</div></div></div>'
-  +'<div class="card"><div class="ct">📂 Tambah Kategori</div>'
-  +'<div style="display:flex;gap:.5rem"><input id="newCat" placeholder="Nama kategori baru..." style="flex:1"><button class="btn btn-success" onclick="addCat()">+ Tambah</button></div></div>'
-  +'<div class="card"><div class="ct">🗂️ Kategori & File</div><div id="ftree"><div class="empty">Memuat...</div></div></div>'
-  +'<div class="card"><div class="ct">➕ Tambah File</div>'
-  +'<div class="alert alert-info">💡 Cara dapat File ID: Kirim <code>/addfile Kategori | Versi</code> ke bot, lalu kirim filenya. Bot simpan otomatis.</div>'
-  +'<div class="row"><div class="fg"><label>Kategori</label><select id="fCat"></select></div><div class="fg"><label>Versi</label><input id="fVer" placeholder="v1.21.50"></div></div>'
-  +'<div class="row"><div class="fg"><label>File ID Telegram</label><input id="fId" placeholder="BQACAgIAAxkB..."></div><div class="fg"><label>Tipe</label><select id="fType"><option value="document">📄 Document/APK</option><option value="video">🎬 Video</option><option value="photo">🖼️ Foto</option><option value="audio">🎵 Audio</option></select></div></div>'
-  +'<div class="fg"><label>Caption</label><textarea id="fCap" style="min-height:60px" placeholder="Deskripsi file..."></textarea></div>'
-  +'<button class="btn btn-primary" onclick="addFile()">💾 Simpan File</button></div></div>'
-
-  +'<div class="page" id="p-content"><div class="ph"><div><div class="pt">✏️ Atur Konten</div><div class="ps">Edit teks menu bot</div></div></div>'
-  +'<div class="card"><div class="ct">📢 Pengumuman</div>'
-  +'<div class="fg"><textarea id="sAnn" placeholder="Teks pengumuman...&#10;HTML: &lt;b&gt;tebal&lt;/b&gt; &lt;i&gt;miring&lt;/i&gt;"></textarea></div>'
-  +'<div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="saveCfgKey(\'ann\',\'sAnn\',\'Pengumuman\')">💾 Simpan</button><button class="btn btn-success" onclick="saveAndBC()">📤 Simpan + Kirim ke Semua</button><button class="btn btn-danger" onclick="delCfgKey(\'ann\',\'sAnn\',\'Pengumuman\')">🗑️ Hapus</button></div></div>'
-  +'<div class="card"><div class="ct">📺 Info YouTube</div>'
-  +'<div class="fg"><textarea id="sYt" placeholder="Link & deskripsi YouTube..."></textarea></div>'
-  +'<div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveCfgKey(\'youtube_info\',\'sYt\',\'YouTube\')">💾 Simpan</button><button class="btn btn-danger" onclick="delCfgKey(\'youtube_info\',\'sYt\',\'YouTube\')">🗑️ Hapus</button></div></div>'
-  +'<div class="card"><div class="ct">ℹ️ Tentang Kami</div>'
-  +'<div class="fg"><textarea id="sInfo" placeholder="Info bot, kontak, deskripsi..."></textarea></div>'
-  +'<div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">💾 Simpan</button><button class="btn btn-danger" onclick="delCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">🗑️ Hapus</button></div></div></div>'
-
-  +'<div class="page" id="p-menu"><div class="ph"><div><div class="pt">🔘 Menu Builder</div><div class="ps">Kelola tombol di menu utama bot</div></div></div>'
-  +'<div class="card"><div class="ct">📋 Tombol Saat Ini</div><div id="btnList"><div class="empty">Memuat...</div></div></div>'
-  +'<div class="card"><div class="ct">➕ Tambah Tombol Baru</div>'
-  +'<div class="row"><div class="fg"><label>Teks Tombol</label><input id="btnText" placeholder="Emoji + nama tombol"></div>'
-  +'<div class="fg"><label>Tipe</label><select id="btnType" onchange="toggleBtnFields()"><option value="url">🔗 URL (buka link)</option><option value="callback">⚡ Callback (aksi bot)</option><option value="command">💬 Command (auto reply)</option></select></div></div>'
-  +'<div id="fUrl" class="fg"><label>URL Tujuan</label><input id="btnUrl" placeholder="https://..."></div>'
-  +'<div id="fCb" class="fg" style="display:none"><label>Callback Data</label><input id="btnData" placeholder="menu:apps atau cat:NamaKategori"><div style="font-size:.72rem;color:var(--m);margin-top:.25rem">Built-in: menu:apps | menu:announcements | menu:youtube | menu:info | cat:NamaKategori</div></div>'
-  +'<div id="fCmd" style="display:none"><div class="fg"><label>Trigger (kata/perintah)</label><input id="btnTrigger" placeholder="/halo atau promo"></div><div class="fg"><label>Respons Bot</label><textarea id="btnResponse" style="min-height:70px" placeholder="Respons yang dikirim bot..."></textarea></div></div>'
-  +'<button class="btn btn-primary" onclick="addBtn()">+ Tambah Tombol</button></div></div>'
-
-  +'<div class="page" id="p-commands"><div class="ph"><div><div class="pt">⚡ Auto Reply</div><div class="ps">Bot auto balas ketika user kirim trigger tertentu</div></div></div>'
-  +'<div class="card"><div class="ct">📋 Command Aktif</div><div id="cmdList"><div class="empty">Memuat...</div></div></div>'
-  +'<div class="card"><div class="ct">➕ Tambah Auto Reply</div>'
-  +'<div class="row"><div class="fg"><label>Trigger (kata yang dikirim user)</label><input id="cmdTrig" placeholder="Contoh: /halo atau info harga"></div></div>'
-  +'<div class="fg"><label>Respons Bot (HTML diperbolehkan)</label><textarea id="cmdResp" placeholder="Respons yang akan dikirim bot..."></textarea></div>'
-  +'<button class="btn btn-primary" onclick="addCmd()">+ Tambah</button>'
-  +'<div class="alert alert-info" style="margin-top:.875rem">💡 Bot akan otomatis membalas jika user mengirim teks yang <b>sama persis</b> dengan trigger.</div></div></div>'
-
-  +'<div class="page" id="p-settings"><div class="ph"><div><div class="pt">⚙️ Settings</div></div></div>'
-  +'<div class="card"><div class="ct">🔗 Webhook</div>'
-  +'<div class="fg"><label>Webhook URL</label><input id="wh2" readonly></div>'
-  +'<button class="btn btn-success" onclick="setupWebhook()">⚡ Setup Webhook</button></div></div>'
-
+  +'<div class="page active" id="p-overview"><div class="ph"><div><div class="pt">📊 Overview</div><div class="ps">Ringkasan statistik bot</div></div></div><div class="sg2"><div class="stat"><div class="sn" id="st0">0</div><div class="sl">Total Chat</div></div><div class="stat"><div class="sn" id="st1">0</div><div class="sl">Pengguna</div></div><div class="stat"><div class="sn" id="st2">0</div><div class="sl">Grup</div></div><div class="stat"><div class="sn" id="st3">0</div><div class="sl">Channel</div></div></div><div class="card"><div class="ct">🔗 Sistem</div><div class="fg"><label>Webhook URL</label><div style="display:flex;gap:.4rem"><input id="wUrl" readonly><button class="btn btn-success btn-sm" onclick="setupWebhook()">⚡ Setup</button></div></div><div class="fg"><label>Dashboard URL (Bookmark ini!)</label><input id="dashUrl" readonly></div></div></div>'
+  +'<div class="page" id="p-broadcast"><div class="ph"><div><div class="pt">📢 Broadcast</div><div class="ps">Kirim pesan ke semua atau filter target</div></div></div><div class="card"><div class="ct">✏️ Buat Pesan</div><div class="mtabs"><div class="mtab active" id="mt-text" onclick="setMode(\'text\')">📝 Teks</div><div class="mtab" id="mt-photo" onclick="setMode(\'photo\')">🖼️ Foto</div><div class="mtab" id="mt-video" onclick="setMode(\'video\')">🎬 Video</div></div><div id="m-text"><div class="fg"><label>Pesan (HTML)</label><textarea id="bcText" placeholder="Tulis pesan broadcast..."></textarea></div></div><div id="m-photo" style="display:none"><div class="fg"><label>URL Foto / File ID</label><input id="bcPhoto" placeholder="https://... atau file_id"></div><div class="fg"><label>Caption</label><textarea id="bcPC" style="min-height:60px"></textarea></div></div><div id="m-video" style="display:none"><div class="fg"><label>URL Video / File ID</label><input id="bcVideo" placeholder="https://... atau file_id"></div><div class="fg"><label>Caption</label><textarea id="bcVC" style="min-height:60px"></textarea></div></div><div class="row"><div class="fg"><label>Target</label><select id="bcTarget"><option value="all">🌐 Semua</option><option value="users">👤 Pengguna</option><option value="groups">👥 Grup</option><option value="channels">📢 Channel</option></select></div></div><button class="btn btn-primary" onclick="sendBC()">📤 Kirim Sekarang</button><div id="bcProg" style="display:none;margin-top:.875rem"><div style="font-size:.78rem;color:var(--m);margin-bottom:.4rem" id="bcSt"></div><div class="prog-wrap"><div class="prog" id="bcBar" style="width:0%"></div></div></div></div></div>'
+  +'<div class="page" id="p-chats"><div class="ph"><div><div class="pt">👥 User List</div><div class="ps">Semua pengguna, grup, dan channel</div></div><button class="btn btn-ghost btn-sm" onclick="loadChats()">🔄 Refresh</button></div><div class="card"><div class="sw"><input id="cq" placeholder="🔍 Cari nama, username, ID..." oninput="filterChats()"></div><div id="chatTbl"><div class="empty">Memuat...</div></div></div></div>'
+  +'<div class="page" id="p-files"><div class="ph"><div><div class="pt">📁 File Manager</div><div class="ps">Kelola kategori dan file</div></div></div><div class="card"><div class="ct">📂 Tambah Kategori</div><div style="display:flex;gap:.5rem"><input id="newCat" placeholder="Nama kategori baru..." style="flex:1"><button class="btn btn-success" onclick="addCat()">+ Tambah</button></div></div><div class="card"><div class="ct">🗂️ Kategori & File</div><div id="ftree"><div class="empty">Memuat...</div></div></div><div class="card"><div class="ct">➕ Tambah File</div><div class="alert alert-info">💡 Cara dapat File ID: Kirim <code>/addfile Kategori | Versi</code> ke bot, lalu kirim filenya.</div><div class="row"><div class="fg"><label>Kategori</label><select id="fCat"></select></div><div class="fg"><label>Versi</label><input id="fVer" placeholder="v1.21.50"></div></div><div class="row"><div class="fg"><label>File ID Telegram</label><input id="fId" placeholder="BQACAgIAAxkB..."></div><div class="fg"><label>Tipe</label><select id="fType"><option value="document">📄 Document/APK</option><option value="video">🎬 Video</option><option value="photo">🖼️ Foto</option><option value="audio">🎵 Audio</option></select></div></div><div class="fg"><label>Caption</label><textarea id="fCap" style="min-height:60px" placeholder="Deskripsi file..."></textarea></div><button class="btn btn-primary" onclick="addFile()">💾 Simpan File</button></div></div>'
+  +'<div class="page" id="p-content"><div class="ph"><div><div class="pt">✏️ Atur Konten</div><div class="ps">Edit teks menu bot</div></div></div><div class="card"><div class="ct">📢 Pengumuman</div><div class="fg"><textarea id="sAnn" placeholder="Teks pengumuman..."></textarea></div><div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn btn-primary" onclick="saveCfgKey(\'ann\',\'sAnn\',\'Pengumuman\')">💾 Simpan</button><button class="btn btn-success" onclick="saveAndBC()">📤 Simpan + Kirim</button><button class="btn btn-danger" onclick="delCfgKey(\'ann\',\'sAnn\',\'Pengumuman\')">🗑️ Hapus</button></div></div><div class="card"><div class="ct">📺 Info YouTube</div><div class="fg"><textarea id="sYt" placeholder="Link & deskripsi YouTube..."></textarea></div><div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveCfgKey(\'youtube_info\',\'sYt\',\'YouTube\')">💾 Simpan</button><button class="btn btn-danger" onclick="delCfgKey(\'youtube_info\',\'sYt\',\'YouTube\')">🗑️ Hapus</button></div></div><div class="card"><div class="ct">ℹ️ Tentang Kami</div><div class="fg"><textarea id="sInfo" placeholder="Info bot, kontak, deskripsi..."></textarea></div><div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">💾 Simpan</button><button class="btn btn-danger" onclick="delCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">🗑️ Hapus</button></div></div></div>'
+  +'<div class="page" id="p-menu"><div class="ph"><div><div class="pt">🔘 Menu Builder</div><div class="ps">Kelola tombol menu utama</div></div></div><div class="card"><div class="ct">📋 Tombol Saat Ini</div><div id="btnList"><div class="empty">Memuat...</div></div></div><div class="card"><div class="ct">➕ Tambah Tombol Baru</div><div class="row"><div class="fg"><label>Teks Tombol</label><input id="btnText" placeholder="Emoji + nama tombol"></div><div class="fg"><label>Tipe</label><select id="btnType" onchange="toggleBtnFields()"><option value="url">🔗 URL</option><option value="callback">⚡ Callback</option><option value="command">💬 Command</option></select></div></div><div id="fUrl" class="fg"><label>URL Tujuan</label><input id="btnUrl" placeholder="https://..."></div><div id="fCb" class="fg" style="display:none"><label>Callback Data</label><input id="btnData" placeholder="menu:apps atau cat:NamaKategori"></div><div id="fCmd" style="display:none"><div class="fg"><label>Trigger</label><input id="btnTrigger" placeholder="/halo atau promo"></div><div class="fg"><label>Respons Bot</label><textarea id="btnResponse" style="min-height:70px" placeholder="Respons yang dikirim bot..."></textarea></div></div><button class="btn btn-primary" onclick="addBtn()">+ Tambah Tombol</button></div></div>'
+  +'<div class="page" id="p-commands"><div class="ph"><div><div class="pt">⚡ Auto Reply</div><div class="ps">Bot auto balas ketika user kirim trigger</div></div></div><div class="card"><div class="ct">📋 Command Aktif</div><div id="cmdList"><div class="empty">Memuat...</div></div></div><div class="card"><div class="ct">➕ Tambah Auto Reply</div><div class="fg"><label>Trigger</label><input id="cmdTrig" placeholder="Contoh: /halo atau info harga"></div><div class="fg"><label>Respons Bot</label><textarea id="cmdResp" placeholder="Respons yang akan dikirim bot..."></textarea></div><button class="btn btn-primary" onclick="addCmd()">+ Tambah</button><div class="alert alert-info" style="margin-top:.875rem">💡 Bot akan membalas jika user mengirim teks yang <b>sama persis</b> dengan trigger.</div></div></div>'
+  +'<div class="page" id="p-settings"><div class="ph"><div><div class="pt">⚙️ Settings</div></div></div><div class="card"><div class="ct">🔗 Webhook</div><div class="fg"><label>Webhook URL</label><input id="wh2" readonly></div><button class="btn btn-success" onclick="setupWebhook()">⚡ Setup Webhook</button></div></div>'
   +'</main></div>'
-
-  +'<div class="modal" id="editChatModal"><div class="modal-box">'
-  +'<div class="modal-title">✏️ Edit User <button class="close-btn" onclick="closeEditChat()">✕</button></div>'
-  +'<div class="fg"><label>Nama Tampilan</label><input id="editChatName" placeholder="Nama custom (override nama Telegram)"></div>'
-  +'<div class="fg"><label>Notes Admin</label><textarea id="editChatNotes" style="min-height:70px" placeholder="Catatan internal..."></textarea></div>'
-  +'<div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveEditChat()">💾 Simpan</button><button class="btn btn-ghost" onclick="closeEditChat()">Batal</button></div>'
-  +'</div></div>'
-
-  +'<div class="modal" id="editFileModal"><div class="modal-box">'
-  +'<div class="modal-title">✏️ Edit File <button class="close-btn" onclick="closeEditFile()">✕</button></div>'
-  +'<div class="fg"><label>Nama Versi</label><input id="efVer" placeholder="v1.21.50"></div>'
-  +'<div class="fg"><label>Caption</label><textarea id="efCap" style="min-height:80px" placeholder="Deskripsi file..."></textarea></div>'
-  +'<div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveEditFile()">💾 Simpan</button><button class="btn btn-ghost" onclick="closeEditFile()">Batal</button></div>'
-  +'</div></div>'
-
+  +'<div class="modal" id="editChatModal"><div class="modal-box"><div class="modal-title">✏️ Edit User <button class="close-btn" onclick="closeEditChat()">✕</button></div><div class="fg"><label>Nama Tampilan</label><input id="editChatName" placeholder="Nama custom"></div><div class="fg"><label>Notes Admin</label><textarea id="editChatNotes" style="min-height:70px" placeholder="Catatan internal..."></textarea></div><div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveEditChat()">💾 Simpan</button><button class="btn btn-ghost" onclick="closeEditChat()">Batal</button></div></div></div>'
+  +'<div class="modal" id="editFileModal"><div class="modal-box"><div class="modal-title">✏️ Edit File <button class="close-btn" onclick="closeEditFile()">✕</button></div><div class="fg"><label>Nama Versi</label><input id="efVer" placeholder="v1.21.50"></div><div class="fg"><label>Caption</label><textarea id="efCap" style="min-height:80px" placeholder="Deskripsi file..."></textarea></div><div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveEditFile()">💾 Simpan</button><button class="btn btn-ghost" onclick="closeEditFile()">Batal</button></div></div></div>'
   +'<script>' + allJS + '<\/script></body></html>';
 }
 
@@ -856,4 +642,4 @@ export default {
     if (url.pathname.startsWith("/api/")) return handleAPI(req, env, url);
     return Response.redirect(url.origin + "/dashboard", 302);
   }
-};w
+};
