@@ -13,7 +13,6 @@ const TG = (token, method, params = {}) =>
 async function getCfg(env) {
   const d = await env.BOT_KV.get("cfg");
   const cfg = d ? JSON.parse(d) : {};
-  // migrate lama
   if (!cfg._migrated) {
     const [bi, yi, an] = await Promise.all([
       env.BOT_KV.get("bot_info"), env.BOT_KV.get("youtube_info"), env.BOT_KV.get("latest_announcement")
@@ -97,8 +96,9 @@ function catKB(menu) {
   return { inline_keyboard: rows };
 }
 
+// FIX: Gunakan || sebagai separator agar aman dari : di nama kategori
 function verKB(cat, vers) {
-  const rows = Object.keys(vers).map(v => [{ text: "📦 " + v, callback_data: "file:" + cat + ":" + v }]);
+  const rows = Object.keys(vers).map(v => [{ text: "📦 " + v, callback_data: "f:" + cat + "||" + v }]);
   rows.push([{ text: "🔙 Kembali", callback_data: "menu:apps" }]);
   return { inline_keyboard: rows };
 }
@@ -210,8 +210,14 @@ async function handleCB(token, q, env, adminId) {
     if (!Object.keys(vers).length) return edit("📂 <b>"+cat+"</b>\n\nBelum ada file tersedia di kategori ini.", backKB());
     return edit("📂 <b>"+cat+"</b>\n\nPilih versi yang ingin diunduh:", verKB(cat, vers));
   }
-  if (data.startsWith("file:")) {
-    const pts = data.split(":"), cat = pts[1], ver = pts[2];
+
+  // FIX: Parse file callback dengan separator || agar aman dari : di nama kategori
+  if (data.startsWith("f:")) {
+    const rest = data.slice(2);
+    const sepIdx = rest.indexOf("||");
+    if (sepIdx === -1) return TG(token, "sendMessage", { chat_id: chatId, text: "❌ Format callback tidak valid." });
+    const cat = rest.slice(0, sepIdx);
+    const ver = rest.slice(sepIdx + 2);
     const menu = await getMenu(env), file = menu[cat] && menu[cat][ver];
     if (!file) return TG(token, "sendMessage", { chat_id: chatId, text: "❌ File tidak ditemukan." });
     const mm = { document: ["sendDocument","document"], video: ["sendVideo","video"], photo: ["sendPhoto","photo"], audio: ["sendAudio","audio"], animation: ["sendAnimation","animation"] };
@@ -286,17 +292,24 @@ async function handleWebhook(req, env) {
     const msg = u.message, chat = msg.chat, user = msg.from;
     const isAdmin = String(user && user.id) === adminId, text = msg.text || "";
 
-    if (msg.new_chat_members) {
-      const me = await TG(token, "getMe");
-      if (msg.new_chat_members.some(m => m.id === (me.result && me.result.id))) {
+    // FIX: Panggil getMe sekali saja jika diperlukan
+    let botId = null;
+    if (msg.new_chat_members || msg.left_chat_member) {
+      try {
+        const me = await TG(token, "getMe");
+        botId = me.result && me.result.id;
+      } catch { /* ignore */ }
+    }
+
+    if (msg.new_chat_members && botId) {
+      if (msg.new_chat_members.some(m => m.id === botId)) {
         await addChat(env, chat);
-        TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-          text: "👋 <b>MCPatch Bot aktif!</b>\nGrup ini akan menerima pengumuman dari admin.\n🌐 mcpatch.me" });
+        await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+          text: "👋 <b>MCPatch Bot aktif!</b>\nGrup ini akan menerima pengumuman dari admin.\n🌐 mcpatch.me" }).catch(()=>{});
       }
     }
-    if (msg.left_chat_member) {
-      const me = await TG(token, "getMe");
-      if (msg.left_chat_member.id === (me.result && me.result.id)) await removeChat(env, chat.id);
+    if (msg.left_chat_member && botId) {
+      if (msg.left_chat_member.id === botId) await removeChat(env, chat.id);
     }
 
     const handled = await handlePending(token, msg, env, adminId);
@@ -308,7 +321,7 @@ async function handleWebhook(req, env) {
     for (const [trigger, resp] of Object.entries(cfg.custom_commands || {})) {
       if (text.toLowerCase() === trigger.toLowerCase() || text.toLowerCase().startsWith(trigger.toLowerCase()+" ")) {
         await addChat(env, chat);
-        TG(token, "sendMessage", { chat_id: chat.id, text: resp, parse_mode: "HTML" });
+        await TG(token, "sendMessage", { chat_id: chat.id, text: resp, parse_mode: "HTML" }).catch(()=>{});
         return new Response("OK");
       }
     }
@@ -319,43 +332,43 @@ async function handleWebhook(req, env) {
       const chats = await getChats(env);
       const joinDate = chats[String(user.id)] && chats[String(user.id)].added_at ? fmtDate(chats[String(user.id)].added_at) : "Hari ini";
       const status = isAdmin ? "👑 Administrator" : "⭐ Pengguna Standar";
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
         text: "✨ <b>Selamat Datang di MCPatch Bot!</b>\n\n━━━━━━━━━━━━━━━━━━━━\n👤 <b>Profil Kamu</b>\n━━━━━━━━━━━━━━━━━━━━\n"+
           "🏷️ <b>Nama</b>         : "+name+"\n🔖 <b>Username</b>   : "+(user.username?"@"+user.username:"Tidak disetel")+"\n"+
           "🪪 <b>ID Telegram</b>  : <code>"+user.id+"</code>\n🎖️ <b>Status</b>       : "+status+"\n📅 <b>Bergabung</b>  : "+joinDate+"\n━━━━━━━━━━━━━━━━━━━━\n\n"+
           "Selamat datang! Gunakan menu di bawah untuk menjelajahi semua fitur yang tersedia. 🚀",
-        reply_markup: buildMainKeyboard(cfg) });
+        reply_markup: buildMainKeyboard(cfg) }).catch(()=>{});
     } else if (text.match(/^\/admin/i)) {
       if (!isAdmin) return TG(token, "sendMessage", { chat_id: chat.id, text: "⛔ Akses ditolak." });
       const chats = Object.values(await getChats(env));
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
         text: "⚙️ <b>Panel Administrator</b>\n\n📊 Pengguna: <b>"+chats.filter(c=>c.type==="private").length+"</b> | Grup: <b>"+chats.filter(c=>c.type==="group"||c.type==="supergroup").length+"</b> | Channel: <b>"+chats.filter(c=>c.type==="channel").length+"</b>\n\nPilih aksi:",
-        reply_markup: adminKB() });
+        reply_markup: adminKB() }).catch(()=>{});
     } else if (text.match(/^\/broadcast /i) && isAdmin) {
       const bc = text.replace(/^\/broadcast /i,"").trim();
       const { ok, fail } = await broadcast(token, env, bc, "text");
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Broadcast selesai!\n📤 Berhasil: <b>"+ok+"</b>  ❌ Gagal: <b>"+fail+"</b>" });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Broadcast selesai!\n📤 Berhasil: <b>"+ok+"</b>  ❌ Gagal: <b>"+fail+"</b>" }).catch(()=>{});
     } else if (text.match(/^\/addcat /i) && isAdmin) {
       const name = text.replace(/^\/addcat /i,"").trim();
       const menu = await getMenu(env); if (!menu[name]) { menu[name] = {}; await saveMenu(env, menu); }
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> ditambahkan!" });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> ditambahkan!" }).catch(()=>{});
     } else if (text.match(/^\/delcat /i) && isAdmin) {
       const name = text.replace(/^\/delcat /i,"").trim();
       const menu = await getMenu(env); delete menu[name]; await saveMenu(env, menu);
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> dihapus." });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Kategori <b>"+name+"</b> dihapus." }).catch(()=>{});
     } else if (text.match(/^\/addfile /i) && isAdmin) {
       const raw = text.replace(/^\/addfile /i,"").trim(), pts = raw.split("|");
       if (pts.length < 2) return TG(token, "sendMessage", { chat_id: chat.id, text: "Format: /addfile <kategori> | <versi>" });
       await setPending(env, String(user.id), { action: "add_file", cat: pts[0].trim(), ver: pts[1].trim() });
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Siap! Kirim file untuk:\n📁 <b>"+pts[0].trim()+"</b> — <b>"+pts[1].trim()+"</b>" });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML", text: "✅ Siap! Kirim file untuk:\n📁 <b>"+pts[0].trim()+"</b> — <b>"+pts[1].trim()+"</b>" }).catch(()=>{});
     } else if (text.match(/^\/listcat/i) && isAdmin) {
       const menu = await getMenu(env), cats = Object.keys(menu);
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-        text: cats.length ? "📋 <b>Kategori:</b>\n"+cats.map((c,i)=>(i+1)+". "+c+" ("+Object.keys(menu[c]).length+" file)").join("\n") : "Belum ada kategori." });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+        text: cats.length ? "📋 <b>Kategori:</b>\n"+cats.map((c,i)=>(i+1)+". "+c+" ("+Object.keys(menu[c]).length+" file)").join("\n") : "Belum ada kategori." }).catch(()=>{});
     } else if (text.match(/^\/help/i)) {
       const adm = isAdmin ? "\n\n<b>🔑 Admin:</b>\n/admin — Panel admin\n/broadcast &lt;pesan&gt; — Broadcast\n/addcat /delcat /addfile /listcat" : "";
-      TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
-        text: "<b>📖 Bantuan MCPatch Bot</b>\n\n/start — Menu utama\n/menu — Menu utama\n/help — Bantuan ini"+adm });
+      await TG(token, "sendMessage", { chat_id: chat.id, parse_mode: "HTML",
+        text: "<b>📖 Bantuan MCPatch Bot</b>\n\n/start — Menu utama\n/menu — Menu utama\n/help — Bantuan ini"+adm }).catch(()=>{});
     }
   }
 
@@ -503,7 +516,7 @@ function loginHTML(origin) {
 
 // ── DASHBOARD ─────────────────────────────────────────────────
 function dashboardHTML(origin, k) {
-  var ek = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var ek = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'');
   var C = 'var K=\''+ek+'\',ORIGIN=\''+origin+'\',BASE=ORIGIN+\'/api\',allChats=[],curMode=\'text\',editChatId=null,editFileData=null;';
 
   var apiFn = 'function api(p,b){var s=p.indexOf(\'?\')>-1?\'&\':\'?\';'
@@ -646,8 +659,9 @@ function dashboardHTML(origin, k) {
     +'apiP(\'add-command\',{trigger:t,response:r}).then(function(d){if(d.ok){alert2(\'Command ditambahkan!\');document.getElementById(\'cmdTrig\').value=\'\';document.getElementById(\'cmdResp\').value=\'\';loadCommands();}});}'
     +'function delCmd(enc){var t=decodeURIComponent(enc);if(!confirm(\'Hapus command "\'+t+\'"?\'))return;apiP(\'del-command\',{trigger:t}).then(function(d){if(d.ok){alert2(\'Dihapus!\');loadCommands();}});}';
 
+  // FIX: Tambahkan wh2 value di init
   var initFn = 'function setupWebhook(){apiP(\'setup-webhook\',{}).then(function(d){if(d.ok)alert2(\'✅ Webhook aktif!\');else alert2(\'Gagal: \'+JSON.stringify(d.result),\'err\');});}'
-    +'function init(){document.getElementById(\'wUrl\').value=ORIGIN+\'/webhook\';document.getElementById(\'dashUrl\').value=ORIGIN+\'/dashboard?k=\'+encodeURIComponent(K);loadStats();}'
+    +'function init(){document.getElementById(\'wUrl\').value=ORIGIN+\'/webhook\';document.getElementById(\'wh2\').value=ORIGIN+\'/webhook\';document.getElementById(\'dashUrl\').value=ORIGIN+\'/dashboard?k=\'+encodeURIComponent(K);loadStats();}'
     +'window.onload=init;';
 
   var allJS = C + apiFn + utilFn + statsFn + chatFn + fileFn + contentFn + menuFn + cmdFn + initFn;
@@ -716,7 +730,7 @@ function dashboardHTML(origin, k) {
   +'hr{border:none;border-top:1px solid var(--b2);margin:1rem 0}'
   +'code{background:rgba(255,255,255,.07);padding:.15rem .4rem;border-radius:.35rem;color:#93c5fd;font-size:.8rem}'
   +'.sw{display:flex;gap:.5rem;margin-bottom:.875rem}.sw input{flex:1}'
-  +'/* MODAL */.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}'
+  +'.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}'
   +'.modal-box{background:#111827;border:1px solid var(--b);border-radius:1rem;padding:1.5rem;width:100%;max-width:420px}'
   +'.modal-title{font-weight:800;font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}'
   +'.close-btn{background:none;border:none;color:var(--m);font-size:1.25rem;cursor:pointer;line-height:1}'
@@ -724,10 +738,8 @@ function dashboardHTML(origin, k) {
 
   +'</head><body>'
 
-  // TOPBAR
   +'<div class="top"><div class="brand"><svg viewBox="0 0 30 30" fill="none"><rect width="30" height="30" rx="7" fill="url(#tg)"/><path d="M7 15L11 11L15 15L19 11" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 19L11 15L15 19L19 15" stroke="rgba(255,255,255,.4)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="tg" x1="0" y1="0" x2="30" y2="30"><stop stop-color="#3b82f6"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs></svg><h1>MCPatch Dashboard</h1></div><div class="online"><div class="dot"></div>Online</div></div>'
 
-  // LAYOUT
   +'<div class="layout">'
   +'<nav class="sidebar">'
   +'<div class="sg">Utama</div>'
@@ -746,14 +758,12 @@ function dashboardHTML(origin, k) {
 
   +'<main><div id="ga"></div>'
 
-  // OVERVIEW
   +'<div class="page active" id="p-overview"><div class="ph"><div><div class="pt">📊 Overview</div><div class="ps">Ringkasan statistik bot</div></div></div>'
   +'<div class="sg2"><div class="stat"><div class="sn" id="st0">0</div><div class="sl">Total Chat</div></div><div class="stat"><div class="sn" id="st1">0</div><div class="sl">Pengguna</div></div><div class="stat"><div class="sn" id="st2">0</div><div class="sl">Grup</div></div><div class="stat"><div class="sn" id="st3">0</div><div class="sl">Channel</div></div></div>'
   +'<div class="card"><div class="ct">🔗 Sistem</div>'
   +'<div class="fg"><label>Webhook URL</label><div style="display:flex;gap:.4rem"><input id="wUrl" readonly><button class="btn btn-success btn-sm" onclick="setupWebhook()">⚡ Setup</button></div></div>'
   +'<div class="fg"><label>Dashboard URL (Bookmark ini!)</label><input id="dashUrl" readonly></div></div></div>'
 
-  // BROADCAST
   +'<div class="page" id="p-broadcast"><div class="ph"><div><div class="pt">📢 Broadcast</div><div class="ps">Kirim pesan ke semua atau filter target</div></div></div>'
   +'<div class="card"><div class="ct">✏️ Buat Pesan</div>'
   +'<div class="mtabs"><div class="mtab active" id="mt-text" onclick="setMode(\'text\')">📝 Teks</div><div class="mtab" id="mt-photo" onclick="setMode(\'photo\')">🖼️ Foto</div><div class="mtab" id="mt-video" onclick="setMode(\'video\')">🎬 Video</div></div>'
@@ -764,12 +774,10 @@ function dashboardHTML(origin, k) {
   +'<button class="btn btn-primary" onclick="sendBC()">📤 Kirim Sekarang</button>'
   +'<div id="bcProg" style="display:none;margin-top:.875rem"><div style="font-size:.78rem;color:var(--m);margin-bottom:.4rem" id="bcSt"></div><div class="prog-wrap"><div class="prog" id="bcBar" style="width:0%"></div></div></div></div></div>'
 
-  // CHATS
   +'<div class="page" id="p-chats"><div class="ph"><div><div class="pt">👥 User List</div><div class="ps">Semua pengguna, grup, dan channel terdaftar</div></div><button class="btn btn-ghost btn-sm" onclick="loadChats()">🔄 Refresh</button></div>'
   +'<div class="card"><div class="sw"><input id="cq" placeholder="🔍 Cari nama, username, ID, atau notes..." oninput="filterChats()"></div>'
   +'<div id="chatTbl"><div class="empty">Memuat...</div></div></div></div>'
 
-  // FILES
   +'<div class="page" id="p-files"><div class="ph"><div><div class="pt">📁 File Manager</div><div class="ps">Kelola kategori dan file distribusi aplikasi</div></div></div>'
   +'<div class="card"><div class="ct">📂 Tambah Kategori</div>'
   +'<div style="display:flex;gap:.5rem"><input id="newCat" placeholder="Nama kategori baru..." style="flex:1"><button class="btn btn-success" onclick="addCat()">+ Tambah</button></div></div>'
@@ -781,7 +789,6 @@ function dashboardHTML(origin, k) {
   +'<div class="fg"><label>Caption</label><textarea id="fCap" style="min-height:60px" placeholder="Deskripsi file..."></textarea></div>'
   +'<button class="btn btn-primary" onclick="addFile()">💾 Simpan File</button></div></div>'
 
-  // CONTENT
   +'<div class="page" id="p-content"><div class="ph"><div><div class="pt">✏️ Atur Konten</div><div class="ps">Edit teks menu bot</div></div></div>'
   +'<div class="card"><div class="ct">📢 Pengumuman</div>'
   +'<div class="fg"><textarea id="sAnn" placeholder="Teks pengumuman...&#10;HTML: &lt;b&gt;tebal&lt;/b&gt; &lt;i&gt;miring&lt;/i&gt;"></textarea></div>'
@@ -793,7 +800,6 @@ function dashboardHTML(origin, k) {
   +'<div class="fg"><textarea id="sInfo" placeholder="Info bot, kontak, deskripsi..."></textarea></div>'
   +'<div style="display:flex;gap:.4rem"><button class="btn btn-primary" onclick="saveCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">💾 Simpan</button><button class="btn btn-danger" onclick="delCfgKey(\'bot_info\',\'sInfo\',\'Info Bot\')">🗑️ Hapus</button></div></div></div>'
 
-  // MENU BUILDER
   +'<div class="page" id="p-menu"><div class="ph"><div><div class="pt">🔘 Menu Builder</div><div class="ps">Kelola tombol di menu utama bot</div></div></div>'
   +'<div class="card"><div class="ct">📋 Tombol Saat Ini</div><div id="btnList"><div class="empty">Memuat...</div></div></div>'
   +'<div class="card"><div class="ct">➕ Tambah Tombol Baru</div>'
@@ -804,7 +810,6 @@ function dashboardHTML(origin, k) {
   +'<div id="fCmd" style="display:none"><div class="fg"><label>Trigger (kata/perintah)</label><input id="btnTrigger" placeholder="/halo atau promo"></div><div class="fg"><label>Respons Bot</label><textarea id="btnResponse" style="min-height:70px" placeholder="Respons yang dikirim bot..."></textarea></div></div>'
   +'<button class="btn btn-primary" onclick="addBtn()">+ Tambah Tombol</button></div></div>'
 
-  // COMMANDS / AUTO REPLY
   +'<div class="page" id="p-commands"><div class="ph"><div><div class="pt">⚡ Auto Reply</div><div class="ps">Bot auto balas ketika user kirim trigger tertentu</div></div></div>'
   +'<div class="card"><div class="ct">📋 Command Aktif</div><div id="cmdList"><div class="empty">Memuat...</div></div></div>'
   +'<div class="card"><div class="ct">➕ Tambah Auto Reply</div>'
@@ -813,15 +818,13 @@ function dashboardHTML(origin, k) {
   +'<button class="btn btn-primary" onclick="addCmd()">+ Tambah</button>'
   +'<div class="alert alert-info" style="margin-top:.875rem">💡 Bot akan otomatis membalas jika user mengirim teks yang <b>sama persis</b> dengan trigger.</div></div></div>'
 
-  // SETTINGS
   +'<div class="page" id="p-settings"><div class="ph"><div><div class="pt">⚙️ Settings</div></div></div>'
   +'<div class="card"><div class="ct">🔗 Webhook</div>'
   +'<div class="fg"><label>Webhook URL</label><input id="wh2" readonly></div>'
   +'<button class="btn btn-success" onclick="setupWebhook()">⚡ Setup Webhook</button></div></div>'
 
-  +'</main></div>' // end layout
+  +'</main></div>'
 
-  // MODALS
   +'<div class="modal" id="editChatModal"><div class="modal-box">'
   +'<div class="modal-title">✏️ Edit User <button class="close-btn" onclick="closeEditChat()">✕</button></div>'
   +'<div class="fg"><label>Nama Tampilan</label><input id="editChatName" placeholder="Nama custom (override nama Telegram)"></div>'
@@ -853,4 +856,4 @@ export default {
     if (url.pathname.startsWith("/api/")) return handleAPI(req, env, url);
     return Response.redirect(url.origin + "/dashboard", 302);
   }
-};
+};w
