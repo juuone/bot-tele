@@ -616,7 +616,7 @@ function dashboardHTML(origin, k) {
     +'var el=document.getElementById(\'btnList\');'
     +'var fixed=[{text:\'📱 Download Aplikasi\',type:\'callback\',info:\'menu:apps\'},{text:\'📢 Pengumuman\',type:\'callback\',info:\'menu:announcements\'},{text:\'📺 Channel YouTube\',type:\'callback\',info:\'menu:youtube\'},{text:\'ℹ️ Tentang Kami\',type:\'callback\',info:\'menu:info\'},{text:\'🌐 Kunjungi mcpatch.me\',type:\'url\',info:\'https://mcpatch.me\'}];'
     +'el.innerHTML=\'<div style="margin-bottom:.75rem"><small style="color:var(--m)">Tombol bawaan (tidak dapat dihapus):</small></div>\''
-    +'+fixed.map(function(b){return\'<div class="btnrow fixed"><span class="btntxt">\'+ esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(b.info)+\'</span></div>\';}).join(\'\'')'
+    +'+fixed.map(function(b){return\'<div class="btnrow fixed"><span class="btntxt">\'+ esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(b.info)+\'</span></div>\';}).join(\'\')'
     +'+(buttons.length ? \'<div style="margin:.75rem 0"><small style="color:var(--m)">Tombol custom:</small></div>\'+buttons.map(function(b,i){'
     +'var info=b.type===\'url\'?b.url:b.type===\'callback\'?b.data:b.trigger;'
     +'return\'<div class="btnrow"><span class="btntxt">\'+esc(b.text)+\'</span><span class="chip chip-\'+b.type+\'">\'+b.type+\'</span><span style="color:var(--m);font-size:.75rem">\'+esc(info)+\'</span><button class="btn btn-danger btn-icon" onclick="delBtn(\'+ i +\')">🗑</button></div>\';}).join(\'\') : \'<div style="color:var(--m);font-size:.85rem;padding:.5rem 0">Belum ada tombol custom.</div>\')'
