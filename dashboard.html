@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPatch Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #060d1f;
+      --card: #0f172a;
+      --border: rgba(255,255,255,0.05);
+      --accent: #3b82f6;
+      --accent2: #8b5cf6;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --glass: rgba(15,23,42,0.7);
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 20%, rgba(139,92,246,0.08) 0%, transparent 60%);
+      display: flex;
+      flex-direction: column;
+    }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    .topbar {
+      background: rgba(13,20,38,0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 0.75rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand { display: flex; align-items: center; gap: 0.75rem; }
+    .brand svg { width: 28px; height: 28px; }
+    .brand h1 {
+      font-size: 0.95rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      margin-right: 0.3rem;
+    }
+    @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+    .layout {
+      display: flex;
+      flex: 1;
+    }
+    .sidebar {
+      width: 240px;
+      background: rgba(13,20,38,0.7);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid rgba(255,255,255,0.05);
+      padding: 1.5rem 0.75rem;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar .section-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      font-weight: 700;
+      margin: 1.25rem 0.5rem 0.5rem;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 0.625rem;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      margin-bottom: 0.1rem;
+      user-select: none;
+    }
+    .nav-item:hover { background: rgba(59,130,246,0.08); color: var(--text); }
+    .nav-item.active {
+      background: rgba(59,130,246,0.15);
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .main-content {
+      flex: 1;
+      padding: 1.5rem 2rem;
+      overflow-y: auto;
+    }
+    .page { display: none; }
+    .page.active { display: block; }
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+      transition: border 0.2s;
+    }
+    .card:hover { border-color: rgba(59,130,246,0.2); }
+    .card-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .stat:hover { transform: translateY(-3px); border-color: rgba(59,130,246,0.3); }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; font-weight: 500; }
+    label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    input, textarea, select {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      color: var(--text);
+      padding: 0.65rem 0.85rem;
+      font-size: 0.85rem;
+      font-family: inherit;
+      transition: 0.2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .form-group { margin-bottom: 0.9rem; }
+    .btn {
+      padding: 0.6rem 1.1rem;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+    }
+    .btn-primary:hover { opacity: 0.9; box-shadow: 0 4px 15px rgba(59,130,246,0.35); }
+    .btn-success { background: linear-gradient(135deg, #16a34a, #22c55e); color: white; }
+    .btn-danger { background: rgba(239,68,68,0.12); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: var(--danger); color: white; }
+    .btn-ghost { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.75rem; }
+    .btn-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 0.5rem; }
+    .alert {
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.82rem;
+      margin-bottom: 0.9rem;
+      font-weight: 500;
+    }
+    .alert-ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); color: #86efac; }
+    .alert-err { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; }
+    .alert-info { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: #93c5fd; }
+    .tabs { display: flex; gap: 0.35rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+    .tab {
+      padding: 0.4rem 0.9rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      font-family: inherit;
+      transition: 0.15s;
+    }
+    .tab:hover { border-color: var(--accent); color: var(--accent); }
+    .tab.active { background: rgba(59,130,246,0.15); border-color: var(--accent); color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 0.6rem 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge {
+      padding: 0.15rem 0.6rem;
+      border-radius: 1rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+    .badge-private { background: rgba(59,130,246,0.15); color: #93c5fd; }
+    .badge-group, .badge-supergroup { background: rgba(34,197,94,0.15); color: #86efac; }
+    .badge-channel { background: rgba(239,68,68,0.15); color: #fca5a5; }
+    .chip {
+      padding: 0.15rem 0.5rem;
+      border-radius: 1rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+    }
+    .btn-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      margin-bottom: 0.35rem;
+    }
+    .btn-row.fixed { opacity: 0.6; }
+    .bc-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      margin-bottom: 0.25rem;
+      cursor: pointer;
+      transition: 0.15s;
+      font-size: 0.82rem;
+    }
+    .bc-item:hover { border-color: var(--accent); }
+    .bc-item.selected { background: rgba(59,130,246,0.08); border-color: var(--accent); }
+    .prog-wrap { background: rgba(255,255,255,0.05); border-radius: 1rem; height: 4px; overflow: hidden; margin-top: 0.5rem; }
+    .prog { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 1rem; width: 0%; transition: width 0.4s; }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 420px;
+    }
+    .modal-title {
+      font-weight: 800;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .close-btn { background: none; border: none; color: var(--muted); font-size: 1.25rem; cursor: pointer; }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main-content { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="url(#g)"/><path d="M7 14L11 10L15 14L19 10" stroke="white" stroke-width="1.8"/><path d="M7 18L11 14L15 18L19 14" stroke="rgba(255,255,255,0.4)" stroke-width="1.8"/><defs><linearGradient id="g"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs></svg>
+      <h1>MCPatch</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;color:var(--success);font-weight:600;"><span class="status-dot"></span>Online</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="section-title">Menu</div>
+      <div class="nav-item active" data-page="overview">📊 Overview</div>
+      <div class="nav-item" data-page="broadcast">📢 Broadcast</div>
+      <div class="section-title">Data</div>
+      <div class="nav-item" data-page="users">👥 User List</div>
+      <div class="nav-item" data-page="files">📁 File Manager</div>
+      <div class="section-title">Bot Config</div>
+      <div class="nav-item" data-page="content">✏️ Konten</div>
+      <div class="nav-item" data-page="menu">🔘 Menu Builder</div>
+      <div class="nav-item" data-page="commands">⚡ Auto Reply</div>
+      <div class="section-title">Sistem</div>
+      <div class="nav-item" data-page="settings">⚙️ Settings</div>
+    </div>
+
+    <div class="main-content">
+      <div id="alert-area"></div>
+
+      <!-- Overview Page -->
+      <div class="page active" id="page-overview">
+        <div class="stats-grid">
+          <div class="stat"><div class="stat-value" id="st-total">0</div><div class="stat-label">Total</div></div>
+          <div class="stat"><div class="stat-value" id="st-users">0</div><div class="stat-label">Pengguna</div></div>
+          <div class="stat"><div class="stat-value" id="st-groups">0</div><div class="stat-label">Grup</div></div>
+          <div class="stat"><div class="stat-value" id="st-channels">0</div><div class="stat-label">Channel</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">🔗 Endpoint</div>
+          <div class="form-group"><label>Webhook URL</label><input id="webhook-url" readonly></div>
+          <div class="form-group"><label>Dashboard URL</label><input id="dashboard-url" readonly></div>
+        </div>
+      </div>
+
+      <!-- Broadcast Page -->
+      <div class="page" id="page-broadcast">
+        <div class="card">
+          <div class="card-title">✏️ Buat Pesan</div>
+          <div class="tabs" id="mode-tabs">
+            <div class="tab active" data-mode="text">📝 Teks</div>
+            <div class="tab" data-mode="photo">🖼️ Foto</div>
+            <div class="tab" data-mode="video">🎬 Video</div>
+          </div>
+          <div id="mode-text">
+            <div class="form-group"><label>Pesan (HTML)</label><textarea id="bc-text" placeholder="Tulis pesan broadcast..."></textarea></div>
+          </div>
+          <div id="mode-photo" style="display:none">
+            <div class="form-group"><label>URL Foto / File ID</label><input id="bc-photo" placeholder="https://..."></div>
+            <div class="form-group"><label>Caption</label><textarea id="bc-pcaption"></textarea></div>
+          </div>
+          <div id="mode-video" style="display:none">
+            <div class="form-group"><label>URL Video / File ID</label><input id="bc-video" placeholder="https://..."></div>
+            <div class="form-group"><label>Caption</label><textarea id="bc-vcaption"></textarea></div>
+          </div>
+
+          <div class="tabs" id="target-tabs">
+            <div class="tab active" data-target="filter">🌐 Filter Tipe</div>
+            <div class="tab" data-target="manual">🎯 Pilih Manual</div>
+          </div>
+
+          <div id="target-filter">
+            <div class="form-group"><label>Target</label>
+              <select id="bc-target-type">
+                <option value="all">Semua</option>
+                <option value="users">Pengguna</option>
+                <option value="groups">Grup</option>
+                <option value="channels">Channel</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="target-manual" style="display:none">
+            <div class="form-group"><label>Filter Tipe</label>
+              <select id="bc-manual-type" onchange="renderBCTargets()">
+                <option value="all">Semua</option>
+                <option value="private">Pengguna</option>
+                <option value="group">Grup</option>
+                <option value="channel">Channel</option>
+              </select>
+            </div>
+            <div class="form-group"><input id="bc-search" placeholder="🔍 Cari..." oninput="renderBCTargets()"></div>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+              <button class="btn btn-ghost btn-sm" onclick="toggleAllBC(true)">✅ Pilih Semua</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleAllBC(false)">❌ Batal Pilih</button>
+              <span id="bc-sel-count" style="font-size:0.8rem;color:var(--muted);align-self:center;">0 dipilih</span>
+            </div>
+            <div id="bc-target-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:0.5rem;padding:0.5rem;"></div>
+          </div>
+
+          <button class="btn btn-primary" onclick="sendBroadcast()">📤 Kirim Sekarang</button>
+          <div id="bc-progress" style="display:none;margin-top:0.75rem;">
+            <div id="bc-progress-text" style="font-size:0.8rem;color:var(--muted);margin-bottom:0.3rem;"></div>
+            <div class="prog-wrap"><div class="prog" id="bc-bar"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Page -->
+      <div class="page" id="page-users">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h2 style="font-size:1rem;">👥 User List</h2>
+          <button class="btn btn-ghost btn-sm" onclick="loadUsers()">🔄 Refresh</button>
+        </div>
+        <div class="form-group"><input id="user-search" placeholder="🔍 Cari..." oninput="renderUsers()"></div>
+        <div id="user-table" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- Files Page -->
+      <div class="page" id="page-files">
+        <div class="card">
+          <div class="card-title">➕ Tambah Kategori</div>
+          <div style="display:flex;gap:0.5rem;">
+            <input id="new-cat-name" placeholder="Nama kategori..." style="flex:1">
+            <button class="btn btn-success" onclick="addCategory()">+ Tambah</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">🗂️ Kategori & File</div>
+          <div id="file-tree"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">➕ Tambah File (Manual)</div>
+          <div class="alert alert-info">Gunakan perintah bot /addfile Kategori|Versi untuk kemudahan.</div>
+          <div class="form-group"><label>Kategori</label><select id="f-cat"></select></div>
+          <div class="form-group"><label>Versi</label><input id="f-ver" placeholder="v1.21.50"></div>
+          <div class="form-group"><label>File ID</label><input id="f-id"></div>
+          <div class="form-group"><label>Tipe</label><select id="f-type"><option value="document">Document/APK</option><option value="video">Video</option><option value="photo">Photo</option><option value="audio">Audio</option></select></div>
+          <div class="form-group"><label>Caption</label><textarea id="f-caption"></textarea></div>
+          <button class="btn btn-primary" onclick="addFile()">💾 Simpan</button>
+        </div>
+      </div>
+
+      <!-- Content Page -->
+      <div class="page" id="page-content">
+        <div class="card">
+          <div class="card-title">📢 Pengumuman</div>
+          <textarea id="s-ann" placeholder="Teks pengumuman..."></textarea>
+          <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+            <button class="btn btn-primary" onclick="saveCfgKey('ann','s-ann')">💾 Simpan</button>
+            <button class="btn btn-success" onclick="saveAndBroadcastAnn()">📤 Simpan + Kirim</button>
+            <button class="btn btn-danger" onclick="delCfgKey('ann','s-ann')">🗑️ Hapus</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📺 Info YouTube</div>
+          <textarea id="s-yt" placeholder="Link & deskripsi..."></textarea>
+          <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+            <button class="btn btn-primary" onclick="saveCfgKey('youtube_info','s-yt')">💾 Simpan</button>
+            <button class="btn btn-danger" onclick="delCfgKey('youtube_info','s-yt')">🗑️ Hapus</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">ℹ️ Tentang Kami</div>
+          <textarea id="s-info" placeholder="Info bot..."></textarea>
+          <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+            <button class="btn btn-primary" onclick="saveCfgKey('bot_info','s-info')">💾 Simpan</button>
+            <button class="btn btn-danger" onclick="delCfgKey('bot_info','s-info')">🗑️ Hapus</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Menu Builder Page -->
+      <div class="page" id="page-menu">
+        <div class="card">
+          <div class="card-title">📋 Tombol Saat Ini</div>
+          <div id="btn-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">➕ Tambah Tombol</div>
+          <div class="form-group"><label>Teks</label><input id="btn-text"></div>
+          <div class="form-group"><label>Tipe</label>
+            <select id="btn-type" onchange="toggleBtnFields()">
+              <option value="url">🔗 URL</option>
+              <option value="callback">⚡ Callback</option>
+              <option value="command">💬 Command</option>
+            </select>
+          </div>
+          <div id="f-url" class="form-group"><label>URL</label><input id="btn-url"></div>
+          <div id="f-cb" class="form-group" style="display:none"><label>Callback Data</label><input id="btn-data"></div>
+          <div id="f-cmd" style="display:none">
+            <div class="form-group"><label>Trigger</label><input id="btn-trigger"></div>
+            <div class="form-group"><label>Respons</label><textarea id="btn-response"></textarea></div>
+          </div>
+          <button class="btn btn-primary" onclick="addButton()">+ Tambah</button>
+        </div>
+      </div>
+
+      <!-- Commands Page -->
+      <div class="page" id="page-commands">
+        <div class="card">
+          <div class="card-title">📋 Command Aktif</div>
+          <div id="cmd-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">➕ Tambah Command</div>
+          <div class="form-group"><label>Trigger</label><input id="cmd-trigger" placeholder="/halo"></div>
+          <div class="form-group"><label>Respons</label><textarea id="cmd-response"></textarea></div>
+          <button class="btn btn-primary" onclick="addCommand()">+ Tambah</button>
+        </div>
+      </div>
+
+      <!-- Settings Page -->
+      <div class="page" id="page-settings">
+        <div class="card">
+          <div class="card-title">🔗 Webhook</div>
+          <div class="form-group"><label>URL</label><input id="wh-url" readonly></div>
+          <button class="btn btn-success" onclick="setupWebhook()">⚡ Setup Webhook</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div class="modal" id="edit-user-modal">
+    <div class="modal-box">
+      <div class="modal-title">✏️ Edit User <button class="close-btn" onclick="closeModal('edit-user-modal')">✕</button></div>
+      <div class="form-group"><label>Nama Tampilan</label><input id="eu-name"></div>
+      <div class="form-group"><label>Notes</label><textarea id="eu-notes"></textarea></div>
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn btn-primary" onclick="saveEditUser()">💾 Simpan</button>
+        <button class="btn btn-ghost" onclick="closeModal('edit-user-modal')">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit File Modal -->
+  <div class="modal" id="edit-file-modal">
+    <div class="modal-box">
+      <div class="modal-title">✏️ Edit File <button class="close-btn" onclick="closeModal('edit-file-modal')">✕</button></div>
+      <div class="form-group"><label>Versi</label><input id="ef-ver"></div>
+      <div class="form-group"><label>Caption</label><textarea id="ef-caption"></textarea></div>
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn btn-primary" onclick="saveEditFile()">💾 Simpan</button>
+        <button class="btn btn-ghost" onclick="closeModal('edit-file-modal')">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== GLOBAL STATE ====================
+    const PASSWORD = new URLSearchParams(location.search).get('k') || localStorage.getItem('pw') || '';
+    if (!PASSWORD) { document.body.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Password tidak tersedia. Tambahkan ?k=password ke URL.</div>'; throw new Error('No password'); }
+    localStorage.setItem('pw', PASSWORD);
+
+    const BASE = location.origin + '/api';
+    let allChats = [];
+    let selectedBCIds = [];
+    let bcMode = 'text';
+    let bcTargetMode = 'filter';
+    let editUserId = null;
+    let editFileData = null;
+
+    // ==================== HELPERS ====================
+    function api(p, method = 'GET', body = null) {
+      const opts = { method, headers: { 'X-Pw': PASSWORD } };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      return fetch(`${BASE}/${p}`, opts).then(r => r.json());
+    }
+
+    function alert2(msg, type = 'ok') {
+      const el = document.getElementById('alert-area');
+      el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+      setTimeout(() => el.innerHTML = '', 4000);
+    }
+
+    function showPage(pageId) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`page-${pageId}`).classList.add('active');
+      document.querySelector(`[data-page="${pageId}"]`).classList.add('active');
+      // Trigger load
+      if (pageId === 'overview') loadOverview();
+      else if (pageId === 'users') loadUsers();
+      else if (pageId === 'files') loadFiles();
+      else if (pageId === 'content') loadContent();
+      else if (pageId === 'menu') loadMenu();
+      else if (pageId === 'commands') loadCommands();
+    }
+
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    // ==================== OVERVIEW ====================
+    async function loadOverview() {
+      const d = await api('chats');
+      if (d.ok) {
+        allChats = Object.values(d.chats);
+        document.getElementById('st-total').textContent = allChats.length;
+        document.getElementById('st-users').textContent = allChats.filter(c => c.type === 'private').length;
+        document.getElementById('st-groups').textContent = allChats.filter(c => c.type === 'group' || c.type === 'supergroup').length;
+        document.getElementById('st-channels').textContent = allChats.filter(c => c.type === 'channel').length;
+      }
+      document.getElementById('webhook-url').value = `${location.origin}/webhook`;
+      document.getElementById('dashboard-url').value = `${location.origin}/dashboard?k=${PASSWORD}`;
+    }
+
+    // ==================== USERS ====================
+    async function loadUsers() {
+      const d = await api('chats');
+      if (d.ok) allChats = Object.values(d.chats);
+      renderUsers();
+    }
+
+    function renderUsers() {
+      const q = document.getElementById('user-search').value.toLowerCase();
+      const filtered = allChats.filter(c => 
+        (c.title || c.display_name || '').toLowerCase().includes(q) ||
+        (c.username || '').toLowerCase().includes(q) ||
+        String(c.id).includes(q)
+      );
+      const el = document.getElementById('user-table');
+      if (!filtered.length) { el.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Tidak ditemukan.</div>'; return; }
+      let html = `<table><thead><tr><th>Nama</th><th>Tipe</th><th>Username</th><th>Notes</th><th>Aksi</th></tr></thead><tbody>`;
+      filtered.forEach(c => {
+        html += `<tr>
+          <td><b>${esc(c.display_name || c.title || '?')}</b><br><small style="color:var(--muted)">${c.id}</small></td>
+          <td><span class="badge badge-${c.type}">${c.type}</span></td>
+          <td style="color:var(--muted)">${c.username ? '@'+c.username : '-'}</td>
+          <td style="max-width:150px;word-break:break-word;font-size:0.78rem;">${esc(c.notes || '')}</td>
+          <td>
+            <button class="btn btn-ghost btn-icon" onclick="openEditUser('${c.id}')">✏️</button>
+            <button class="btn btn-danger btn-icon" onclick="deleteUser('${c.id}')">🗑</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    function openEditUser(id) {
+      const c = allChats.find(x => String(x.id) === String(id));
+      if (!c) return;
+      editUserId = id;
+      document.getElementById('eu-name').value = c.display_name || c.title || '';
+      document.getElementById('eu-notes').value = c.notes || '';
+      document.getElementById('edit-user-modal').style.display = 'flex';
+    }
+
+    async function saveEditUser() {
+      if (!editUserId) return;
+      await api('update-chat', 'POST', {
+        id: editUserId,
+        display_name: document.getElementById('eu-name').value.trim(),
+        notes: document.getElementById('eu-notes').value.trim()
+      });
+      closeModal('edit-user-modal');
+      loadUsers();
+      alert2('User diperbarui!');
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('Hapus user ini?')) return;
+      await api('remove-chat', 'POST', { id });
+      loadUsers();
+      alert2('User dihapus.');
+    }
+
+    // ==================== FILES ====================
+    async function loadFiles() {
+      const d = await api('files');
+      if (!d.ok) return;
+      renderFileTree(d.menu);
+      const sel = document.getElementById('f-cat');
+      sel.innerHTML = Object.keys(d.menu).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    }
+
+    function renderFileTree(menu) {
+      const el = document.getElementById('file-tree');
+      const cats = Object.keys(menu);
+      if (!cats.length) { el.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Belum ada kategori.</div>'; return; }
+      let html = '';
+      cats.forEach(cat => {
+        const vers = Object.keys(menu[cat]);
+        html += `<div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:0.75rem;margin-bottom:0.5rem;overflow:hidden;">
+          <div style="padding:0.5rem 1rem;background:rgba(59,130,246,0.05);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:var(--accent);">📂 ${esc(cat)} <span class="chip">${vers.length}</span></span>
+            <button class="btn btn-danger btn-sm" onclick="deleteCategory('${esc(cat)}')">🗑 Hapus</button>
+          </div>`;
+        if (vers.length) {
+          vers.forEach(v => {
+            const f = menu[cat][v];
+            html += `<div style="padding:0.5rem 1rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+              <div><b>📦 ${esc(v)}</b> <small style="color:var(--muted)">[${f.file_type}]</small> ${f.caption ? `<br><small style="color:var(--muted)">${esc(f.caption.substring(0,60))}</small>` : ''}</div>
+              <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-ghost btn-sm" onclick="openEditFile('${esc(cat)}','${esc(v)}','${esc(f.caption || '')}')">✏️ Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteFile('${esc(cat)}','${esc(v)}')">🗑</button>
+              </div>
+            </div>`;
+          });
+        } else {
+          html += '<div style="padding:0.5rem 1rem;color:var(--muted);border-top:1px solid var(--border);">Kosong.</div>';
+        }
+        html += '</div>';
+      });
+      el.innerHTML = html;
+    }
+
+    async function addCategory() {
+      const name = document.getElementById('new-cat-name').value.trim();
+      if (!name) return alert2('Nama kategori harus diisi!', 'err');
+      await api('add-cat', 'POST', { name });
+      document.getElementById('new-cat-name').value = '';
+      loadFiles();
+      alert2('Kategori ditambahkan!');
+    }
+
+    async function deleteCategory(name) {
+      if (!confirm(`Hapus kategori "${name}"?`)) return;
+      await api('del-cat', 'POST', { name });
+      loadFiles();
+      alert2('Kategori dihapus.');
+    }
+
+    async function addFile() {
+      const cat = document.getElementById('f-cat').value;
+      const ver = document.getElementById('f-ver').value.trim();
+      const fid = document.getElementById('f-id').value.trim();
+      const type = document.getElementById('f-type').value;
+      const caption = document.getElementById('f-caption').value.trim();
+      if (!cat || !ver || !fid) return alert2('Lengkapi data!', 'err');
+      await api('add-file', 'POST', { cat, ver, file_id: fid, file_type: type, caption });
+      loadFiles();
+      alert2('File ditambahkan!');
+    }
+
+    function openEditFile(cat, ver, caption) {
+      editFileData = { cat, ver };
+      document.getElementById('ef-ver').value = ver;
+      document.getElementById('ef-caption').value = caption;
+      document.getElementById('edit-file-modal').style.display = 'flex';
+    }
+
+    async function saveEditFile() {
+      if (!editFileData) return;
+      const newVer = document.getElementById('ef-ver').value.trim();
+      const caption = document.getElementById('ef-caption').value.trim();
+      await api('edit-file', 'POST', { cat: editFileData.cat, ver: editFileData.ver, new_ver: newVer, caption });
+      closeModal('edit-file-modal');
+      loadFiles();
+      alert2('File diperbarui!');
+    }
+
+    async function deleteFile(cat, ver) {
+      if (!confirm(`Hapus file "${ver}"?`)) return;
+      await api('del-file', 'POST', { cat, ver });
+      loadFiles();
+      alert2('File dihapus.');
+    }
+
+    // ==================== CONTENT ====================
+    async function loadContent() {
+      const d = await api('cfg');
+      if (d.ok) {
+        document.getElementById('s-ann').value = d.cfg.ann || '';
+        document.getElementById('s-yt').value = d.cfg.youtube_info || '';
+        document.getElementById('s-info').value = d.cfg.bot_info || '';
+      }
+    }
+
+    async function saveCfgKey(key, elId) {
+      const val = document.getElementById(elId).value;
+      const body = {}; body[key] = val;
+      await api('save-cfg', 'POST', body);
+      alert2('Tersimpan!');
+    }
+
+    async function delCfgKey(key, elId) {
+      if (!confirm('Hapus data ini?')) return;
+      await api('del-cfg', 'POST', { key });
+      document.getElementById(elId).value = '';
+      alert2('Dihapus!');
+    }
+
+    async function saveAndBroadcastAnn() {
+      const text = document.getElementById('s-ann').value.trim();
+      if (!text) return alert2('Tulis pengumuman dulu!', 'err');
+      await api('save-cfg', 'POST', { ann: text });
+      const d = await api('broadcast', 'POST', { mode: 'text', target: 'all', text });
+      if (d.ok) alert2(`Tersimpan & terkirim ke ${d.success} penerima!`);
+      else alert2('Gagal broadcast!', 'err');
+    }
+
+    // ==================== MENU BUILDER ====================
+    async function loadMenu() {
+      const d = await api('menu-buttons');
+      if (!d.ok) return;
+      renderButtons(d.buttons);
+    }
+
+    function renderButtons(buttons) {
+      const el = document.getElementById('btn-list');
+      const fixed = [
+        { text: '📱 Download Aplikasi', type: 'callback', info: 'menu:apps' },
+        { text: '📢 Pengumuman', type: 'callback', info: 'menu:announcements' },
+        { text: '📺 Channel YouTube', type: 'callback', info: 'menu:youtube' },
+        { text: 'ℹ️ Tentang Kami', type: 'callback', info: 'menu:info' },
+        { text: '🌐 Kunjungi mcpatch.me', type: 'url', info: 'https://mcpatch.me' }
+      ];
+      let html = '<div style="margin-bottom:0.75rem;font-size:0.75rem;color:var(--muted);">Bawaan:</div>';
+      fixed.forEach(b => {
+        html += `<div class="btn-row fixed"><span><b>${esc(b.text)}</b></span><span class="chip">${b.type}</span><span style="color:var(--muted);font-size:0.75rem;">${esc(b.info)}</span></div>`;
+      });
+      if (buttons.length) {
+        html += '<div style="margin:0.75rem 0;font-size:0.75rem;color:var(--muted);">Custom:</div>';
+        buttons.forEach((b, i) => {
+          const info = b.type === 'url' ? b.url : (b.type === 'callback' ? b.data : b.trigger);
+          html += `<div class="btn-row">
+            <span><b>${esc(b.text)}</b></span><span class="chip">${b.type}</span>
+            <span style="color:var(--muted);font-size:0.75rem;">${esc(info)}</span>
+            <button class="btn btn-danger btn-icon" onclick="deleteButton(${i})">🗑</button>
+          </div>`;
+        });
+      } else {
+        html += '<div style="color:var(--muted);padding:0.5rem 0;">Kosong.</div>';
+      }
+      el.innerHTML = html;
+    }
+
+    function toggleBtnFields() {
+      const type = document.getElementById('btn-type').value;
+      document.getElementById('f-url').style.display = type === 'url' ? 'block' : 'none';
+      document.getElementById('f-cb').style.display = type === 'callback' ? 'block' : 'none';
+      document.getElementById('f-cmd').style.display = type === 'command' ? 'block' : 'none';
+    }
+
+    async function addButton() {
+      const text = document.getElementById('btn-text').value.trim();
+      const type = document.getElementById('btn-type').value;
+      if (!text) return alert2('Teks harus diisi!', 'err');
+      const body = { text, type };
+      if (type === 'url') body.url = document.getElementById('btn-url').value.trim();
+      else if (type === 'callback') body.data = document.getElementById('btn-data').value.trim();
+      else {
+        body.trigger = document.getElementById('btn-trigger').value.trim();
+        body.response = document.getElementById('btn-response').value.trim();
+      }
+      await api('add-button', 'POST', body);
+      document.getElementById('btn-text').value = '';
+      loadMenu();
+      alert2('Tombol ditambahkan!');
+    }
+
+    async function deleteButton(idx) {
+      if (!confirm('Hapus tombol ini?')) return;
+      await api('del-button', 'POST', { idx });
+      loadMenu();
+      alert2('Tombol dihapus.');
+    }
+
+    // ==================== COMMANDS ====================
+    async function loadCommands() {
+      const d = await api('commands');
+      if (!d.ok) return;
+      const cmds = d.commands;
+      const keys = Object.keys(cmds);
+      const el = document.getElementById('cmd-list');
+      if (!keys.length) { el.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Kosong.</div>'; return; }
+      let html = '<table><thead><tr><th>Trigger</th><th>Respons</th><th></th></tr></thead><tbody>';
+      keys.forEach(k => {
+        html += `<tr><td><code>${esc(k)}</code></td><td style="max-width:250px;word-break:break-word;">${esc(cmds[k].substring(0,80))}</td>
+        <td><button class="btn btn-danger btn-icon" onclick="deleteCommand('${esc(k)}')">🗑</button></td></tr>`;
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function addCommand() {
+      const trigger = document.getElementById('cmd-trigger').value.trim();
+      const response = document.getElementById('cmd-response').value.trim();
+      if (!trigger || !response) return alert2('Lengkapi!', 'err');
+      await api('add-command', 'POST', { trigger, response });
+      document.getElementById('cmd-trigger').value = '';
+      document.getElementById('cmd-response').value = '';
+      loadCommands();
+      alert2('Command ditambahkan!');
+    }
+
+    async function deleteCommand(trigger) {
+      if (!confirm(`Hapus "${trigger}"?`)) return;
+      await api('del-command', 'POST', { trigger });
+      loadCommands();
+      alert2('Dihapus.');
+    }
+
+    // ==================== BROADCAST ====================
+    function setMode(mode) {
+      bcMode = mode;
+      document.querySelectorAll('#mode-tabs .tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`#mode-tabs .tab[data-mode="${mode}"]`).classList.add('active');
+      document.getElementById('mode-text').style.display = mode === 'text' ? 'block' : 'none';
+      document.getElementById('mode-photo').style.display = mode === 'photo' ? 'block' : 'none';
+      document.getElementById('mode-video').style.display = mode === 'video' ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('#mode-tabs .tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+
+    function setTargetMode(mode) {
+      bcTargetMode = mode;
+      document.querySelectorAll('#target-tabs .tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`#target-tabs .tab[data-target="${mode}"]`).classList.add('active');
+      document.getElementById('target-filter').style.display = mode === 'filter' ? 'block' : 'none';
+      document.getElementById('target-manual').style.display = mode === 'manual' ? 'block' : 'none';
+      if (mode === 'manual') renderBCTargets();
+    }
+
+    document.querySelectorAll('#target-tabs .tab').forEach(t => t.addEventListener('click', () => setTargetMode(t.dataset.target)));
+
+    function renderBCTargets() {
+      const type = document.getElementById('bc-manual-type').value;
+      const q = document.getElementById('bc-search').value.toLowerCase();
+      let list = allChats.filter(c => {
+        if (type !== 'all') {
+          if (type === 'private' && c.type !== 'private') return false;
+          if (type === 'group' && c.type !== 'group' && c.type !== 'supergroup') return false;
+          if (type === 'channel' && c.type !== 'channel') return false;
+        }
+        if (q && !(c.title || c.display_name || '').toLowerCase().includes(q) && !(c.username || '').toLowerCase().includes(q) && !String(c.id).includes(q)) return false;
+        return true;
+      });
+      const el = document.getElementById('bc-target-list');
+      if (!list.length) { el.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--muted);">Tidak ada.</div>'; }
+      else {
+        el.innerHTML = list.map(c => {
+          const sel = selectedBCIds.includes(c.id);
+          return `<div class="bc-item ${sel ? 'selected' : ''}" onclick="toggleBCId(${c.id})">
+            <span>${sel ? '✅' : '⬜️'}</span>
+            <div style="flex:1;"><b>${esc(c.display_name || c.title || '?')}</b> ${c.username ? `<span style="color:var(--muted)">@${esc(c.username)}</span>` : ''}</div>
+            <span class="badge badge-${c.type}">${c.type}</span>
+          </div>`;
+        }).join('');
+      }
+      updateBCSelCount();
+    }
+
+    function toggleBCId(id) {
+      const idx = selectedBCIds.indexOf(id);
+      if (idx > -1) selectedBCIds.splice(idx, 1);
+      else selectedBCIds.push(id);
+      renderBCTargets();
+    }
+
+    function toggleAllBC(select) {
+      const type = document.getElementById('bc-manual-type').value;
+      const q = document.getElementById('bc-search').value.toLowerCase();
+      const filtered = allChats.filter(c => {
+        if (type !== 'all') {
+          if (type === 'private' && c.type !== 'private') return false;
+          if (type === 'group' && c.type !== 'group' && c.type !== 'supergroup') return false;
+          if (type === 'channel' && c.type !== 'channel') return false;
+        }
+        if (q && !(c.title || c.display_name || '').toLowerCase().includes(q) && !(c.username || '').toLowerCase().includes(q) && !String(c.id).includes(q)) return false;
+        return true;
+      });
+      if (select) filtered.forEach(c => { if (!selectedBCIds.includes(c.id)) selectedBCIds.push(c.id); });
+      else filtered.forEach(c => { const i = selectedBCIds.indexOf(c.id); if (i > -1) selectedBCIds.splice(i, 1); });
+      renderBCTargets();
+    }
+
+    function updateBCSelCount() {
+      document.getElementById('bc-sel-count').textContent = `${selectedBCIds.length} dipilih`;
+    }
+
+    async function sendBroadcast() {
+      const body = { mode: bcMode };
+      if (bcMode === 'text') {
+        body.text = document.getElementById('bc-text').value.trim();
+        if (!body.text) return alert2('Pesan harus diisi!', 'err');
+      } else if (bcMode === 'photo') {
+        body.photo = document.getElementById('bc-photo').value.trim();
+        body.caption = document.getElementById('bc-pcaption').value.trim();
+        if (!body.photo) return alert2('URL foto harus diisi!', 'err');
+      } else {
+        body.video = document.getElementById('bc-video').value.trim();
+        body.caption = document.getElementById('bc-vcaption').value.trim();
+        if (!body.video) return alert2('URL video harus diisi!', 'err');
+      }
+
+      if (bcTargetMode === 'manual') {
+        if (!selectedBCIds.length) return alert2('Pilih minimal 1 target!', 'err');
+        body.chat_ids = selectedBCIds;
+      } else {
+        body.target = document.getElementById('bc-target-type').value;
+      }
+
+      document.getElementById('bc-progress').style.display = 'block';
+      document.getElementById('bc-bar').style.width = '20%';
+      document.getElementById('bc-progress-text').textContent = 'Mengirim...';
+
+      const d = await api('broadcast', 'POST', body);
+      document.getElementById('bc-bar').style.width = '100%';
+      if (d.ok) {
+        document.getElementById('bc-progress-text').textContent = `✅ Selesai! Berhasil: ${d.success}, Gagal: ${d.failed}`;
+        alert2(`Broadcast selesai! ${d.success} terkirim.`);
+      } else {
+        document.getElementById('bc-progress-text').textContent = '❌ Gagal!';
+        alert2('Gagal broadcast!', 'err');
+      }
+    }
+
+    // ==================== SETTINGS ====================
+    function setupWebhook() {
+      api('setup-webhook', 'POST').then(d => {
+        if (d.ok) alert2('Webhook berhasil disetup!');
+        else alert2('Gagal setup webhook!', 'err');
+      });
+    }
+
+    // ==================== INIT ====================
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => showPage(item.dataset.page));
+    });
+
+    document.getElementById('wh-url').value = `${location.origin}/webhook`;
+    loadOverview();
+  </script>
+</body>
+</html>
